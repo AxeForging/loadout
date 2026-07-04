@@ -254,18 +254,25 @@ func sddInstruction(a Answers) string {
 func planCommand(a Answers) string {
 	folder := a.Str("sdd.folder")
 	return fmt.Sprintf(`---
-description: Derive a step-by-step implementation plan from a spec.
+description: Derive (or continue) a persistent, checkbox-tracked implementation plan from a spec.
 ---
 
-Read the spec the user points at (default: the most recent file in %s/).
-Produce an implementation plan:
+Target spec: the one the user points at, else the most recent file in %[1]s/.
+The plan LIVES ON DISK next to its spec as %[1]s/NNN-<name>.plan.md — it is the
+durable progress tracker that survives restarts, crashes and agent switches.
 
-1. List the concrete steps in dependency order, each small enough to verify independently.
-2. Name the files to create or modify per step.
-3. Call out risks, migrations, and rollback strategy.
-4. Define "done": tests to add, how to verify end-to-end.
+1. If the plan file already exists: READ it, report progress (checked vs
+   unchecked), and CONTINUE from the first unchecked step — do not regenerate.
+2. Otherwise derive the plan from the spec and WRITE the file:
+   - Concrete steps in dependency order as "- [ ]" checkboxes, each small
+     enough to verify independently.
+   - Per step: the files to create or modify.
+   - A "Risks" section (migrations, rollback) and a "Done means" section
+     (tests to add, how to verify end-to-end).
 
-Keep the plan reviewable — terse bullets, no prose padding. Ask before deviating from the spec.
+While implementing, KEEP THE FILE CURRENT: check off each step ("- [x]") the
+moment it is done and verified, and append newly discovered steps instead of
+holding them in memory. Ask before deviating from the spec.
 `, folder)
 }
 
@@ -307,16 +314,31 @@ func sddWorkflowSkill(a Answers) string {
 	folder := a.Str("sdd.folder")
 	return fmt.Sprintf(`---
 name: sdd-workflow
-description: The team's spec-driven development flow — when specs are required, where they live, and how /spec and /plan chain together. Use when starting any non-trivial feature.
+description: The team's spec-driven development flow — when specs are required, where specs and their persistent plans live, and how /spec, /plan, /handoff and /resume chain together. Use when starting any non-trivial feature or resuming one.
 ---
 
 # Spec-driven development workflow
 
-1. **Spec first** — for any feature beyond a small fix, run /spec to draft %s/NNN-<name>.md.
+1. **Spec first** — for any feature beyond a small fix, run /spec to draft %[1]s/NNN-<name>.md.
 2. **Review** — the spec is reviewed (or waived explicitly in the PR description).
-3. **Plan** — run /plan against the spec to derive an ordered implementation plan.
-4. **Implement** — follow the plan; if reality diverges from the spec, update the spec in the same PR.
-5. **PR** — reference the spec file in the PR body.
+3. **Plan on disk** — run /plan: it writes %[1]s/NNN-<name>.plan.md, an ordered
+   "- [ ]" checklist. The plan file — not the conversation — is the source of
+   truth for progress.
+4. **Implement with the checklist** — check off steps as they complete and
+   append discovered steps. If reality diverges from the spec, update the spec
+   in the same PR.
+5. **PR** — reference the spec and plan files in the PR body.
+
+## Crash / restart / agent-switch safety
+
+Because progress lives in the plan file, work is resumable by design:
+- After a restart or crash, or in a different agent: run /resume — it reads
+  the context handoff (if any) AND the active plan file, then continues at the
+  first unchecked step.
+- Before ending a session mid-feature, run /handoff and make sure the handoff
+  references the active spec and plan paths.
+- Never keep plan state only in your head or the chat — if a step completed,
+  its checkbox must be checked in the file before moving on.
 
 Never start implementation of a large feature without a spec — if asked to, suggest drafting one with /spec first.
 `, folder)
@@ -383,7 +405,7 @@ Write a context handoff to ` + "`.agents/context/handoff.md`" + ` (create the di
 What we are ultimately trying to achieve, in one or two sentences.
 
 ## Current state
-What is DONE and verified, what is in progress, what is untouched. Reference concrete files and branches.
+What is DONE and verified, what is in progress, what is untouched. Reference concrete files and branches. If a spec/plan is active (docs/specs/*.md + *.plan.md), name both files — the plan's checkboxes carry the step-level progress.
 
 ## Decisions & constraints
 Choices already made (and why), approaches ruled out, constraints to respect.
@@ -404,9 +426,10 @@ description: Resume work from the last context handoff written by /handoff (from
 ---
 
 1. Read ` + "`.agents/context/handoff.md`" + `. If it does not exist, say so and ask what to work on instead.
-2. Cross-check the handoff against reality: run ` + "`git status`" + ` and ` + "`git log --oneline -5`" + `, and spot-check any file the handoff claims was changed.
-3. Summarize in a few lines: the goal, where things stand, and the first next step. Flag any drift between the handoff and the actual repo state.
-4. Continue with the first next step. Respect the decisions and constraints recorded in the handoff — do not relitigate them without new information.
+2. If the handoff references a spec/plan (or ` + "`docs/specs/*.plan.md`" + ` files exist), read the active plan file — its unchecked "- [ ]" items are the authoritative remaining work.
+3. Cross-check against reality: run ` + "`git status`" + ` and ` + "`git log --oneline -5`" + `, and spot-check any file the handoff claims was changed.
+4. Summarize in a few lines: the goal, where things stand, and the first next step. Flag any drift between the handoff/plan and the actual repo state.
+5. Continue with the first unchecked plan step (or the handoff's first next step). Respect recorded decisions — do not relitigate them without new information. Keep checking off plan items as you complete them.
 `
 }
 
