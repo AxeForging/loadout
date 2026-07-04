@@ -1,0 +1,80 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    main: ./cmd/loadout
+    binary: loadout
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/AxeForging/loadout/internal/build.Version={{.Version}}
+      - -X github.com/AxeForging/loadout/internal/build.Commit={{.FullCommit}}
+      - -X github.com/AxeForging/loadout/internal/build.Date={{.Date}}
+      - -X github.com/AxeForging/loadout/internal/build.BuiltBy=goreleaser
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "loadout-{{ .Os }}-{{ .Arch }}"
+    files:
+      - README.md
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+release:
+  github:
+    owner: AxeForging
+    name: loadout
+  draft: false
+  prerelease: auto
+  name_template: "Release {{ .Tag }}"
+  footer: |
+    ## Installation
+
+    ### Go Install
+    ```bash
+    go install github.com/AxeForging/loadout/cmd/loadout@{{ .Tag }}
+    ```
+
+    ### Linux/macOS (AMD64)
+    ```bash
+    curl -L https://github.com/AxeForging/loadout/releases/download/{{ .Tag }}/loadout-linux-amd64.tar.gz | tar xz
+    chmod +x loadout-linux-amd64
+    sudo mv loadout-linux-amd64 /usr/local/bin/loadout
+    ```
+
+    ### Linux/macOS (ARM64)
+    ```bash
+    curl -L https://github.com/AxeForging/loadout/releases/download/{{ .Tag }}/loadout-linux-arm64.tar.gz | tar xz
+    chmod +x loadout-linux-arm64
+    sudo mv loadout-linux-arm64 /usr/local/bin/loadout
+    ```

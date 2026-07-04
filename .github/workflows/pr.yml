@@ -1,0 +1,129 @@
+name: PR
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title follows Conventional Commits
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if echo "$TITLE" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)(\(.+\))?(!)?: .+"; then
+            echo "PR title is valid: $TITLE"
+            exit 0
+          fi
+
+          BODY=$(cat <<'COMMENT'
+          ### ⚠️ Invalid PR Title
+
+          PR title must follow the **Conventional Commits** format since we use squash merge:
+
+          ```
+          <type>[optional scope][!]: <description>
+          ```
+
+          **Allowed types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`, `ci`, `perf`, `revert`
+
+          **Examples:**
+          - `feat: add new feature`
+          - `fix(engine): classify block drift correctly`
+          - `feat!: breaking change`
+          COMMENT
+          )
+
+          gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -X POST -f body="$BODY"
+
+          echo "::error::PR title must follow Conventional Commits format"
+          exit 1
+
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: AxeForging/reviewforge@main
+        continue-on-error: true
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_PROVIDER: gemini
+          AI_MODEL: gemini-2.5-flash-lite
+          AI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SHOW_TOKEN_USAGE: true
+          INCREMENTAL: false
+          REVIEW_RULES: concise
+          CONTEXT_FILES: go.mod,README.md,.structlint.yaml,Makefile
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: AxeForging/structlint@main
+        with:
+          config: .structlint.yaml
+          comment-on-pr: "true"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests
+        run: go test ./... -v
+
+      - name: Build binary
+        run: make build
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          args: --timeout=5m
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run integration tests
+        run: cd integration && go test -v -tags integration -count=1 ./... -timeout 120s
