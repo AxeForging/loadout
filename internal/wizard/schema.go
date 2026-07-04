@@ -124,6 +124,48 @@ func Sections() []Section {
 			},
 		},
 		{
+			ID:    "quality",
+			Title: "Quality — testing strategy",
+			Questions: []Question{
+				{
+					ID: "quality.levels", Prompt: "Which test levels are mandatory?", Type: TypeMulti,
+					Options: opts("unit", "Unit tests", "component", "Component tests (FE)", "integration", "Integration tests", "e2e", "End-to-end tests"),
+					Default: []string{"unit", "integration"},
+				},
+				{
+					ID: "quality.feFramework", Prompt: "Frontend framework (for component-test guidance)?", Type: TypeSelect,
+					Options: opts("react", "React", "vue", "Vue", "svelte", "Svelte", "none", "No frontend"),
+					Default: "react",
+				},
+				{
+					ID: "quality.unitTools", Prompt: "Unit test runners?", Type: TypeMulti,
+					Options: opts("go-testing", "Go stdlib testing", "vitest", "Vitest", "jest", "Jest", "pytest", "pytest"),
+					Default: []string{"go-testing", "vitest"},
+				},
+				{
+					ID: "quality.e2eTool", Prompt: "End-to-end tool?", Type: TypeSelect,
+					Options: opts("playwright", "Playwright", "cypress", "Cypress", "none", "None"),
+					Default: "playwright",
+				},
+				{
+					ID: "quality.mocking", Prompt: "Mocking policy?", Type: TypeSelect,
+					Options: opts("external-only", "Mock external boundaries only (HTTP, third-party APIs) — real code elsewhere", "minimal", "Minimal — prefer real implementations and in-memory fakes", "liberal", "Liberal — mock freely where it speeds tests up"),
+					Default: "external-only",
+				},
+			},
+		},
+		{
+			ID:    "continuity",
+			Title: "Continuity — context handoff between agents and sessions",
+			Questions: []Question{
+				{
+					ID:     "continuity.handoff",
+					Prompt: "Enable cross-agent context handoff (/handoff dumps session state to .agents/context/, /resume picks it up — works across agents and restarts)?",
+					Type:   TypeBool, Default: true,
+				},
+			},
+		},
+		{
 			ID:    "targets",
 			Title: "Targets",
 			Questions: []Question{

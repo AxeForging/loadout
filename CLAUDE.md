@@ -37,6 +37,7 @@ loadout/
 │   ├── bundle/                 # Shareable bundles: export (dir/tar.gz) + validated, gated import
 │   ├── wizard/                 # Builder questionnaire: schema (single source of truth), answers, generators, embedded presets
 │   ├── tui/                    # Bubble Tea dashboard (model.go state/keys, view.go rendering; sync gated by confirm modal)
+│   ├── runner/                 # Headless logged-in agents (claude -p / codex exec / gemini -p): draft + enrich, validated output
 │   ├── config/                 # loadout's own config + platform paths
 │   ├── build/info.go           # Version info injected at build time
 │   └── logging/logging.go      # Zerolog setup

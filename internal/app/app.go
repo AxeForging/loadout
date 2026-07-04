@@ -28,5 +28,7 @@ Workflow:
 		Flags:    icli.GlobalFlags(),
 		Before:   icli.Before,
 		Commands: icli.Commands(),
+		// Bare `loadout` greets with current state + next steps.
+		Action: icli.Overview,
 	}
 }

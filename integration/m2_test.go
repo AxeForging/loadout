@@ -79,12 +79,20 @@ func TestAgents_ListsAllFiveWithDetection(t *testing.T) {
 	e := newMultiAgentEnv(t)
 	out := e.mustRun("agents")
 	for _, id := range []string{"claude-code", "codex", "gemini-cli", "antigravity", "cursor"} {
-		if !strings.Contains(out, id) {
-			t.Errorf("agents output missing %s:\n%s", id, out)
+		line := ""
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(l, id) {
+				line = l
+				break
+			}
 		}
-	}
-	if strings.Contains(out, "no") {
-		t.Errorf("all fake agents should detect as installed:\n%s", out)
+		if line == "" {
+			t.Errorf("agents output missing %s:\n%s", id, out)
+			continue
+		}
+		if !strings.Contains(line, "yes") {
+			t.Errorf("agent %s should detect as installed: %q", id, line)
+		}
 	}
 }
 

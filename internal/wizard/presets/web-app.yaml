@@ -16,3 +16,9 @@ sdd.enable: true
 sdd.folder: docs/specs
 sdd.style: full
 targets.agents: [all]
+quality.levels: [unit, component, e2e]
+quality.feFramework: react
+quality.unitTools: [vitest]
+quality.e2eTool: playwright
+quality.mocking: external-only
+continuity.handoff: true

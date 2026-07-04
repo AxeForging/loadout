@@ -85,6 +85,27 @@ func TestWizard_AnswersFileAndDeclineWritesNothing(t *testing.T) {
 	}
 }
 
+func TestBareLoadout_ShowsOnboardingThenOverview(t *testing.T) {
+	e := newEnv(t)
+
+	out := e.mustRun()
+	if !strings.Contains(out, "No store yet") || !strings.Contains(out, "loadout init") {
+		t.Fatalf("bare loadout should onboard:\n%s", out)
+	}
+
+	e.mustRun("init")
+	out = e.mustRun()
+	if !strings.Contains(out, "The store is empty") {
+		t.Fatalf("bare loadout should suggest filling the store:\n%s", out)
+	}
+
+	e.mustRun("new", "skill", "demo")
+	out = e.mustRun()
+	if !strings.Contains(out, "pending change(s)") || !strings.Contains(out, "loadout sync") {
+		t.Fatalf("bare loadout should surface pending changes:\n%s", out)
+	}
+}
+
 func TestWizard_RejectsInvalidAnswers(t *testing.T) {
 	e := newEnv(t)
 	e.mustRun("init")

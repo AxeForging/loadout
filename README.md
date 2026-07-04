@@ -42,7 +42,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout diff [artifact...]` | Unified diffs of what sync would change |
 | `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`) |
 | `loadout install <agent>` | First-time full install into one agent |
-| `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command` or `hook` in the store |
+| `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command` or `hook` — or draft a skill with `--ai "description"` via your logged-in agent |
 | `loadout add <path>` | Adopt an existing native artifact (skill/hook dir, command/instruction file) into the store |
 | `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
 | `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
@@ -120,14 +120,36 @@ updates:
 
 ## The wizard — conventions in, artifacts out
 
-`loadout wizard` interviews you about what you build (app types, languages, toolchain, docker), your **engineering conventions** (lefthook git hooks, linters, branching model, commit convention, PR-title convention) and whether you want **spec-driven development**, then generates ready-to-sync artifacts:
+`loadout wizard` interviews you about what you build (app types, languages, toolchain, docker), your **engineering conventions** (lefthook git hooks, linters, branching model, commit convention, PR-title convention), your **testing strategy** (which levels are mandatory — unit/component/integration/e2e — per framework and runner, plus a mocking policy) and whether you want **spec-driven development** and **cross-agent context handoff**. It generates ready-to-sync artifacts:
 
-- `core`, `toolchain`, `conventions` instructions (managed blocks in every agent's instruction file)
+- `core`, `toolchain`, `conventions`, `testing` instructions (managed blocks in every agent's instruction file)
 - a `commit-and-pr` skill — commit/branch/PR rules with the validation regex, plus a ready `lefthook.yml` in its references
 - a `linting` skill with run/fix commands per linter, and `docker-workflows` if you use docker
 - `/plan` + `/spec` commands and an `sdd-workflow` skill (light or full spec templates)
+- `/handoff` + `/resume` commands and a `context-handoff` skill (see below)
 
-Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them.
+Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
+
+## Context handoff — continue anywhere
+
+Session context dies with the session. The wizard's continuity artifacts standardize the fix across every agent:
+
+- `/handoff` — the agent dumps a structured handoff (goal, current state, decisions, next steps, gotchas) to `.agents/context/handoff.md` in the project.
+- `/resume` — any agent (Claude Code, Codex, Gemini CLI, …) reads it, verifies it against git state, and continues.
+
+Dump from Claude Code, resume in Codex. Or restart tomorrow and pick up exactly where you left off.
+
+## AI drafting — powered by the agents you already pay for
+
+If you're logged into Claude Code, Codex or Gemini CLI, loadout can use them headlessly (`claude -p`, `codex exec` read-only, `gemini -p`) — no API keys, it rides your existing plan:
+
+```bash
+loadout new skill release-notes --ai "draft release notes from merged PRs since the last tag"
+loadout wizard --preset web-app --ai        # deepens testing/conventions/toolchain for your exact stack
+loadout agents                               # HEADLESS column shows what's available
+```
+
+Reliability model: deterministic templates are always the base (offline, reproducible); AI output is validated (skills must pass the Agent Skills contract) and previewed behind the same confirmation gate as everything else. `--runner claude|codex|gemini` picks the agent explicitly.
 
 ## Bundles — share your whole setup
 

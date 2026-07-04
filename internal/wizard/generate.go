@@ -85,6 +85,16 @@ func artifactSpecs(a Answers) []artifactSpec {
 	if a.Bool("toolchain.docker") {
 		specs = append(specs, artifactSpec{id: "docker-workflows", kind: domain.KindSkill, files: map[string]string{"SKILL.md": dockerSkill(a)}})
 	}
+	if len(a.List("quality.levels")) > 0 {
+		specs = append(specs, artifactSpec{id: "testing", kind: domain.KindInstruction, files: map[string]string{"": testingInstruction(a)}})
+	}
+	if a.Bool("continuity.handoff") {
+		specs = append(specs,
+			artifactSpec{id: "handoff", kind: domain.KindCommand, files: map[string]string{"": handoffCommand()}},
+			artifactSpec{id: "resume", kind: domain.KindCommand, files: map[string]string{"": resumeCommand()}},
+			artifactSpec{id: "context-handoff", kind: domain.KindSkill, files: map[string]string{"SKILL.md": contextHandoffSkill()}},
+		)
+	}
 	if a.Bool("sdd.enable") {
 		specs = append(specs,
 			artifactSpec{id: "sdd", kind: domain.KindInstruction, files: map[string]string{"": sddInstruction(a)}},

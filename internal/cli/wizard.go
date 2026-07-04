@@ -28,6 +28,14 @@ func wizardCmd() *cli.Command {
 				Aliases: []string{"y"},
 				Usage:   "Write to the store without the final confirmation prompt",
 			},
+			&cli.BoolFlag{
+				Name:  "ai",
+				Usage: "After generating, deepen testing/conventions/toolchain docs for your exact stack using a logged-in headless agent (no API key)",
+			},
+			&cli.StringFlag{
+				Name:  "runner",
+				Usage: "Which headless agent to use for --ai: claude, codex or gemini (default: first available)",
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			s, err := openStore(cmd)
@@ -83,6 +91,12 @@ func wizardCmd() *cli.Command {
 				return err
 			}
 			fmt.Printf("Created %d artifact(s).\n", len(g.Created))
+
+			if cmd.Bool("ai") {
+				if err := enrichWithAI(ctx, cmd, s, answers, g); err != nil {
+					fmt.Printf("AI enrichment skipped: %v (the generated templates are fully usable as-is)\n", err)
+				}
+			}
 			fmt.Println("Review them in the store, then run 'loadout sync' to install into your agents.")
 			return nil
 		},

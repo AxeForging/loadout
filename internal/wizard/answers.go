@@ -3,6 +3,7 @@ package wizard
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -76,6 +77,29 @@ func defaultFor(id string) any {
 		}
 	}
 	return nil
+}
+
+// Summary renders the effective answers (including schema defaults) as a
+// compact context block, e.g. for AI-enrichment prompts.
+func (a Answers) Summary() string {
+	var b strings.Builder
+	for _, s := range Sections() {
+		for _, q := range s.Questions {
+			switch q.Type {
+			case TypeMulti:
+				if v := a.List(q.ID); len(v) > 0 {
+					fmt.Fprintf(&b, "- %s: %s\n", q.ID, strings.Join(v, ", "))
+				}
+			case TypeBool:
+				fmt.Fprintf(&b, "- %s: %t\n", q.ID, a.Bool(q.ID))
+			default:
+				if v := a.Str(q.ID); v != "" {
+					fmt.Fprintf(&b, "- %s: %s\n", q.ID, v)
+				}
+			}
+		}
+	}
+	return b.String()
 }
 
 // LoadAnswers reads an answers YAML file (question ID → value).

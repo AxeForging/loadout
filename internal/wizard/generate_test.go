@@ -30,7 +30,7 @@ func TestGenerate_GoCliPresetProducesConventionArtifacts(t *testing.T) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	wantIDs := []string{"core", "toolchain", "conventions", "commit-and-pr", "linting", "docker-workflows", "sdd", "plan", "spec", "sdd-workflow"}
+	wantIDs := []string{"core", "toolchain", "conventions", "commit-and-pr", "linting", "docker-workflows", "sdd", "plan", "spec", "sdd-workflow", "testing", "handoff", "resume", "context-handoff"}
 	got := map[string]domain.Artifact{}
 	for _, art := range g.Created {
 		got[art.ID] = art
@@ -63,6 +63,27 @@ func TestGenerate_GoCliPresetProducesConventionArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(string(snippet), "gofumpt") {
 		t.Errorf("lefthook snippet should wire gofumpt for the fmt hook:\n%s", snippet)
+	}
+
+	// Testing strategy reflects the go-cli preset (Go stdlib, no FE noise).
+	testing_, err := os.ReadFile(filepath.Join(s.Root, "instructions", "testing.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(testing_), "go test -race") {
+		t.Errorf("testing.md missing Go guidance:\n%s", testing_)
+	}
+	if strings.Contains(string(testing_), "Component tests") {
+		t.Errorf("go-cli preset (feFramework none) should not emit component-test guidance:\n%s", testing_)
+	}
+
+	// Context handoff artifacts use the cross-agent location.
+	handoff, err := os.ReadFile(filepath.Join(s.Root, "commands", "handoff.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(handoff), ".agents/context/handoff.md") {
+		t.Errorf("handoff command missing canonical path:\n%s", handoff)
 	}
 }
 

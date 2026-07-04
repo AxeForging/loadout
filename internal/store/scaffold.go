@@ -76,6 +76,30 @@ type scaffoldFile struct {
 	mode    os.FileMode
 }
 
+// CreateSkill writes a skill with the given SKILL.md content (e.g. an
+// AI-drafted one that already passed validation) and registers it.
+func (s *Store) CreateSkill(name string, skillMD []byte) (domain.Artifact, error) {
+	if err := ValidateName(name); err != nil {
+		return domain.Artifact{}, err
+	}
+	if _, exists := s.Artifact(name); exists {
+		return domain.Artifact{}, fmt.Errorf("artifact %q already exists", name)
+	}
+	relPath := filepath.Join(kindDirs[domain.KindSkill], name)
+	abs := filepath.Join(s.Root, relPath, "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return domain.Artifact{}, err
+	}
+	if err := os.WriteFile(abs, skillMD, 0o644); err != nil {
+		return domain.Artifact{}, err
+	}
+	a := domain.Artifact{ID: name, Kind: domain.KindSkill, Path: filepath.ToSlash(relPath), Origin: "local"}
+	if err := s.AddArtifact(a); err != nil {
+		return domain.Artifact{}, err
+	}
+	return a, nil
+}
+
 func skillTemplate(name string) string {
 	return fmt.Sprintf(`---
 name: %s

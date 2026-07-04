@@ -16,3 +16,9 @@ sdd.enable: true
 sdd.folder: docs/specs
 sdd.style: light
 targets.agents: [all]
+quality.levels: [unit, integration]
+quality.feFramework: none
+quality.unitTools: [go-testing]
+quality.e2eTool: none
+quality.mocking: external-only
+continuity.handoff: true

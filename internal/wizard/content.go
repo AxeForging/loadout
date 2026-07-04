@@ -322,6 +322,112 @@ Never start implementation of a large feature without a spec — if asked to, su
 `, folder)
 }
 
+func testingInstruction(a Answers) string {
+	var b strings.Builder
+	b.WriteString("# Testing strategy\n\n")
+	b.WriteString("General rules:\n\n")
+	b.WriteString("- Tests are mandatory for behavior you add or change. Behavior-named tests (`TestSync_DetectsLocalDrift`, `renders empty state when list is empty`), no coverage theater.\n")
+	b.WriteString("- Never assert the mock — test observable behavior.\n\n")
+
+	levels := a.List("quality.levels")
+	if contains(levels, "unit") {
+		b.WriteString("## Unit tests\n\n")
+		for _, tool := range a.List("quality.unitTools") {
+			switch tool {
+			case "go-testing":
+				b.WriteString("- Go: stdlib `testing` only (no assertion frameworks); table tests where natural; `t.TempDir()` for filesystem; run `go test -race ./...`.\n")
+			case "vitest":
+				b.WriteString("- TS/JS: Vitest — colocate `*.test.ts` next to source; run `pnpm test`.\n")
+			case "jest":
+				b.WriteString("- TS/JS: Jest — colocate `*.test.ts`; run `npm test`.\n")
+			case "pytest":
+				b.WriteString("- Python: pytest — `tests/` mirrors package layout; run `pytest -q`.\n")
+			}
+		}
+		b.WriteString("\n")
+	}
+	if contains(levels, "component") && a.Str("quality.feFramework") != "none" {
+		fe := labelOf("quality.feFramework", a.Str("quality.feFramework"))
+		fmt.Fprintf(&b, "## Component tests (%s)\n\n- Use Testing Library idioms: query by role/label like a user would, never by implementation details (class names, internals).\n- Cover: renders with real props, user interaction paths, loading/empty/error states.\n\n", fe)
+	}
+	if contains(levels, "integration") {
+		b.WriteString("## Integration tests\n\n- Exercise the real wiring (real DB in a container or temp dir, real HTTP handlers), not unit tests with more mocks.\n- Keep them deterministic: no sleeps, no shared state between tests, no network beyond local containers.\n\n")
+	}
+	if contains(levels, "e2e") && a.Str("quality.e2eTool") != "none" {
+		tool := labelOf("quality.e2eTool", a.Str("quality.e2eTool"))
+		fmt.Fprintf(&b, "## End-to-end tests (%s)\n\n- A handful of critical user journeys, not a parallel test pyramid.\n- Stable selectors (`data-testid` / roles), auto-waiting assertions, no fixed sleeps.\n\n", tool)
+	}
+
+	b.WriteString("## Mocking policy\n\n")
+	switch a.Str("quality.mocking") {
+	case "minimal":
+		b.WriteString("Minimal mocking: prefer real implementations and in-memory fakes. A mock is a last resort and needs a justification.\n")
+	case "liberal":
+		b.WriteString("Mocks are acceptable wherever they meaningfully speed tests up — but the critical paths still need at least one unmocked test.\n")
+	default:
+		b.WriteString("Mock external boundaries only (third-party HTTP APIs, payment providers, clocks). Everything inside the codebase runs real in tests.\n")
+	}
+	return b.String()
+}
+
+func handoffCommand() string {
+	return `---
+description: Dump the current session context to .agents/context/handoff.md so any agent (or a later session) can pick up exactly where this one left off.
+---
+
+Write a context handoff to ` + "`.agents/context/handoff.md`" + ` (create the directory if needed, overwrite the previous handoff). Structure it exactly like this:
+
+# Handoff — <date> <time>
+
+## Goal
+What we are ultimately trying to achieve, in one or two sentences.
+
+## Current state
+What is DONE and verified, what is in progress, what is untouched. Reference concrete files and branches.
+
+## Decisions & constraints
+Choices already made (and why), approaches ruled out, constraints to respect.
+
+## Next steps
+Ordered, concrete, resumable steps. The first one should be actionable immediately.
+
+## Gotchas
+Anything surprising discovered this session that would waste the next agent's time to rediscover.
+
+Keep it dense and factual — this is for another AI agent, not a status report for humans. After writing, confirm the path so the user can commit it.
+`
+}
+
+func resumeCommand() string {
+	return `---
+description: Resume work from the last context handoff written by /handoff (from any agent or a previous session).
+---
+
+1. Read ` + "`.agents/context/handoff.md`" + `. If it does not exist, say so and ask what to work on instead.
+2. Cross-check the handoff against reality: run ` + "`git status`" + ` and ` + "`git log --oneline -5`" + `, and spot-check any file the handoff claims was changed.
+3. Summarize in a few lines: the goal, where things stand, and the first next step. Flag any drift between the handoff and the actual repo state.
+4. Continue with the first next step. Respect the decisions and constraints recorded in the handoff — do not relitigate them without new information.
+`
+}
+
+func contextHandoffSkill() string {
+	return `---
+name: context-handoff
+description: The team's cross-agent context handoff convention — when and how to dump session state so another agent, another tool, or a later session can continue seamlessly. Use when ending a session, switching agents, or before context gets compacted.
+---
+
+# Context handoff
+
+Session context dies with the session — unless it is written down in a place every agent reads. This team's convention:
+
+- **Location**: ` + "`.agents/context/handoff.md`" + ` in the project root (agent-agnostic — Claude Code, Codex, Gemini CLI, Antigravity and Cursor can all read and write it).
+- **Write** a handoff (via /handoff or manually, same format) whenever: the session is ending mid-task, the user says they will continue later or in another tool, or the conversation is about to be compacted and important context is only in the chat.
+- **Read** it (via /resume) at the start of a session when it exists and is recent; verify it against git state before trusting it.
+- **Format**: Goal · Current state · Decisions & constraints · Next steps · Gotchas. Dense, factual, written for an AI agent.
+- **Lifecycle**: one live handoff per project; it is safe to commit. Delete or rewrite it when the task completes — a stale handoff is worse than none.
+`
+}
+
 func contains(list []string, v string) bool {
 	for _, item := range list {
 		if item == v {

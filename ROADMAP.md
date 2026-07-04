@@ -11,8 +11,9 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 | M3 | External git skill sources (pinned, gated updates) | ✅ shipped |
 | M4 | Shareable bundles (export/import) | ✅ shipped — **released as v0.4.0** |
 | M5 | Builder wizard (conventions + SDD presets) | ✅ shipped — released as v0.5.0 |
-| M6 | TUI dashboard | ✅ shipped — **released as v0.6.0** |
-| M7 | Embedded web UI (React SPA) | ⏳ |
+| M6 | TUI dashboard | ✅ shipped — released as v0.6.0 |
+| M6.5 | Continuity (context handoff) + testing strategy + AI drafting via logged-in agents + no-args overview | ✅ shipped |
+| M7 | Embedded web UI (React SPA) | 🚧 in progress |
 | M8 | v1.0 hardening | ⏳ |
 
 ## M1 — Core + Claude Code adapter ✅ (v0.1.0)
@@ -67,7 +68,14 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ Bubble Tea dashboard (`loadout tui`, alias `dash`): Overview (agent cards + drift counts + pending changes) · Store (artifact browser + content preview) · Agents (drift rows, `d` diff view, `s` sync behind a confirm modal) · Sources (pins, `c` on-demand remote check) · Log (session activity)
 - ✅ The confirmation gate holds in the TUI: declining the modal dispatches nothing (unit-tested via model messages, no PTY needed)
 
-## M7 — Web UI ⏳ (v0.7.0)
+## M6.5 — Continuity, testing strategy, AI drafting ✅
+
+- ✅ **Context handoff**: wizard continuity section generates `/handoff` (dump structured session state to `.agents/context/handoff.md`) + `/resume` (verify against git, continue) + a `context-handoff` skill — cross-agent and restart-proof by convention
+- ✅ **Testing strategy** wizard section: mandatory levels (unit/component/integration/e2e), FE framework, unit runners, e2e tool, mocking policy → `instructions/testing.md` tailored per answer
+- ✅ **Headless runner layer** (`internal/runner`): drives already-logged-in agents (`claude -p --output-format json`, `codex exec` read-only sandbox, `gemini -p`) — no API keys, rides the user's plan. `loadout new skill --ai "desc"` drafts validated SKILL.md; `loadout wizard --ai` deepens testing/conventions/toolchain for the exact stack. Templates stay the deterministic base; AI output is validated + confirmation-gated; `loadout agents` shows a HEADLESS column
+- ✅ Bare `loadout` shows a friendly overview (store, agents, pending changes, contextual next steps) instead of a help wall
+
+## M7 — Web UI 🚧 (v0.7.0)
 
 - Embedded React SPA (React 19 + Vite + Tailwind v4 + TanStack Router/Query + Zustand) built into the binary via `embed.FS` — single-binary distribution preserved
 - `loadout serve [--dev]` — REST + SSE; **two-phase sync** (plan → token → apply) as the permission gate over HTTP
