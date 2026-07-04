@@ -109,4 +109,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ answers, preset }),
     }),
+  profiles: () => request<string[]>("/api/profiles"),
+  profile: (name: string) => request<Answers>(`/api/profiles/${name}`),
+  saveProfile: (name: string, answers: Answers) =>
+    request<{ name: string }>("/api/profiles", {
+      method: "POST",
+      body: JSON.stringify({ name, answers }),
+    }),
+  deleteProfile: (name: string) =>
+    request<{ removed: boolean }>(`/api/profiles/${name}`, { method: "DELETE" }),
 };

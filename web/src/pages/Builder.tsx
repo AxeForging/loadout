@@ -9,9 +9,11 @@ import { PageHeader } from "../components/Layout";
 export function BuilderPage() {
   const schema = useQuery({ queryKey: ["wizard-schema"], queryFn: api.wizardSchema });
   const presets = useQuery({ queryKey: ["wizard-presets"], queryFn: api.wizardPresets });
+  const profiles = useQuery({ queryKey: ["profiles"], queryFn: api.profiles });
 
   const [answers, setAnswers] = useState<Answers>({});
   const [preset, setPreset] = useState<string | undefined>(undefined);
+  const [profile, setProfile] = useState<string | undefined>(undefined);
   const [step, setStep] = useState(0);
 
   const queryClient = useQueryClient();
@@ -19,6 +21,14 @@ export function BuilderPage() {
   const generate = useMutation({
     mutationFn: () => api.wizardGenerate(answers, preset),
     onSuccess: () => void queryClient.invalidateQueries(),
+  });
+  const loadProfile = useMutation({
+    mutationFn: (name: string) => api.profile(name),
+    onSuccess: (loaded, name) => {
+      setAnswers(loaded);
+      setProfile(name);
+      setPreset(undefined);
+    },
   });
 
   const sections = schema.data ?? [];
@@ -41,14 +51,17 @@ export function BuilderPage() {
         sub="Answer once — loadout generates conventions, testing standards, SDD commands and continuity artifacts for every agent. Nothing is written until you confirm the review."
       />
 
-      <div className="mb-8 flex items-center gap-3">
+      <div className="mb-3 flex items-center gap-3">
         <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
           start from
         </span>
         {(presets.data ?? []).map((p) => (
           <button
             key={p}
-            onClick={() => setPreset(preset === p ? undefined : p)}
+            onClick={() => {
+              setPreset(preset === p ? undefined : p);
+              setProfile(undefined);
+            }}
             className={
               preset === p
                 ? "rounded-sm bg-ember-faint px-3 py-1 font-mono text-xs text-ember-bright"
@@ -60,6 +73,32 @@ export function BuilderPage() {
         ))}
         <span className="text-xs text-ink-faint">your answers below override the preset</span>
       </div>
+
+      {(profiles.data ?? []).length > 0 ? (
+        <div className="mb-8 flex items-center gap-3">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
+            or a saved profile
+          </span>
+          {(profiles.data ?? []).map((p) => (
+            <button
+              key={p}
+              onClick={() => loadProfile.mutate(p)}
+              className={
+                profile === p
+                  ? "rounded-sm bg-ember-faint px-3 py-1 font-mono text-xs text-ember-bright"
+                  : "rounded-sm border border-line px-3 py-1 font-mono text-xs text-ink-dim hover:text-ink"
+              }
+            >
+              {p}
+            </button>
+          ))}
+          <span className="text-xs text-ink-faint">
+            loads that team's or org's answers — one org, one project type, one profile
+          </span>
+        </div>
+      ) : (
+        <div className="mb-8" />
+      )}
 
       <div className="flex gap-10">
         <ol className="w-44 shrink-0 space-y-1">
@@ -97,6 +136,7 @@ export function BuilderPage() {
             <ReviewStep
               plan={plan}
               generate={generate}
+              answers={answers}
               onBack={() => setStep(Math.max(0, sections.length - 1))}
             />
           ) : sections[step] ? (
@@ -228,12 +268,23 @@ function Question({
 function ReviewStep({
   plan,
   generate,
+  answers,
   onBack,
 }: {
   plan: ReturnType<typeof useMutation<{ create: string[]; skip: string[] }, Error, void>>;
   generate: ReturnType<typeof useMutation<{ created: string[]; skipped: string[] }, Error, void>>;
+  answers: Answers;
   onBack: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const [profileName, setProfileName] = useState("");
+  const saveProfile = useMutation({
+    mutationFn: (name: string) => api.saveProfile(name, answers),
+    onSuccess: () => {
+      setProfileName("");
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    },
+  });
   if (generate.isSuccess) {
     return (
       <div className="rise max-w-[65ch]">
@@ -287,6 +338,37 @@ function ReviewStep({
             {generate.isError ? (
               <span className="text-xs text-danger">{String(generate.error)}</span>
             ) : null}
+          </div>
+
+          <div className="mt-8 border-t border-line pt-5">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-faint">
+              Save these answers as a profile
+            </h3>
+            <p className="mt-1.5 text-xs text-ink-faint">
+              Reuse this exact stack + conventions next time — for another repo, or share it with
+              your team.
+            </p>
+            <div className="mt-2.5 flex items-center gap-2">
+              <input
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="acme-frontend"
+                className="w-48 rounded-sm border border-line bg-surface px-3 py-1.5 font-mono text-sm text-ink outline-none placeholder:text-ink-faint focus:border-ember-dim"
+              />
+              <button
+                onClick={() => saveProfile.mutate(profileName)}
+                disabled={saveProfile.isPending || profileName.trim() === ""}
+                className="rounded-sm border border-line-strong px-3 py-1.5 font-display text-sm text-ink-dim transition-colors hover:border-ember-dim hover:text-ink disabled:opacity-50"
+              >
+                {saveProfile.isPending ? "Saving…" : "Save as profile"}
+              </button>
+              {saveProfile.isSuccess ? (
+                <span className="text-xs text-sync">■ saved</span>
+              ) : saveProfile.isError ? (
+                <span className="text-xs text-danger">{String(saveProfile.error)}</span>
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}

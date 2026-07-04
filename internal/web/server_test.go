@@ -249,6 +249,56 @@ func TestAPI_WizardPlanAndGenerate(t *testing.T) {
 	}
 }
 
+func TestAPI_ProfilesSaveListGetDelete(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	var names []string
+	req := httptest.NewRequest("GET", "/api/profiles", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if err := json.Unmarshal(rec.Body.Bytes(), &names); err != nil || len(names) != 0 {
+		t.Fatalf("profiles list on empty store = %v, %v", names, err)
+	}
+
+	rec, _ = doJSON(t, h, "POST", "/api/profiles", map[string]any{
+		"name":    "acme-cli",
+		"answers": map[string]any{"toolchain.docker": true},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save profile = %d: %s", rec.Code, rec.Body)
+	}
+
+	req = httptest.NewRequest("GET", "/api/profiles", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	_ = json.Unmarshal(rec.Body.Bytes(), &names)
+	if len(names) != 1 || names[0] != "acme-cli" {
+		t.Fatalf("profiles list after save = %v", names)
+	}
+
+	rec, out := doJSON(t, h, "GET", "/api/profiles/acme-cli", nil)
+	if rec.Code != http.StatusOK || out["toolchain.docker"] != true {
+		t.Fatalf("get profile = %d %v", rec.Code, out)
+	}
+
+	rec, _ = doJSON(t, h, "GET", "/api/profiles/nope", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown profile = %d, want 404", rec.Code)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/profiles/acme-cli", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete profile = %d: %s", rec.Code, rec.Body)
+	}
+	rec, _ = doJSON(t, h, "GET", "/api/profiles/acme-cli", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("profile should be gone after delete, got %d", rec.Code)
+	}
+}
+
 func TestSPA_FallbackServesIndexForClientRoutes(t *testing.T) {
 	srv, _ := newTestServer(t)
 	for _, path := range []string{"/", "/agents", "/store/some-artifact"} {
