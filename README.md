@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/loadout-logo.png" alt="loadout" width="560">
+</p>
+
 # loadout
 
 Your agentic gear kit. loadout keeps AI-agent configs — skills, instructions, slash commands, hooks, settings — in one canonical, git-friendly store and installs them into each coding agent's native home through pluggable adapters.
