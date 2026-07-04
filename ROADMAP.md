@@ -10,7 +10,7 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 | M2 | All five agent adapters + `doctor` + `add` | ✅ shipped |
 | M3 | External git skill sources (pinned, gated updates) | ✅ shipped |
 | M4 | Shareable bundles (export/import) | ✅ shipped — **released as v0.4.0** |
-| M5 | Builder wizard (conventions + SDD presets) | 🚧 in progress |
+| M5 | Builder wizard (conventions + SDD presets) | ✅ shipped — **released as v0.5.0** |
 | M6 | TUI dashboard | ⏳ |
 | M7 | Embedded web UI (React SPA) | ⏳ |
 | M8 | v1.0 hardening | ⏳ |
@@ -52,13 +52,15 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ⏳ import from URL and a `rename` conflict policy — deferred
 - ⏳ `skillsStrategy: shared-agents-dir` (carried from M3) — install skills once into `~/.agents/skills/` for Cursor + Gemini CLI
 
-## M5 — Builder wizard ⏳ (v0.5.0)
+## M5 — Builder wizard ✅ (v0.5.0)
 
-- `loadout wizard` (alias `create`) — guided questionnaire → generated artifacts; single question schema shared by CLI (charmbracelet/huh), TUI and web
-- Sections: profile (app types, languages) · toolchain (tools + versions, package managers, docker) · standards (inline vs referenced)
-- **Engineering conventions**: githooks (lefthook + which hooks), linters (golangci-lint/eslint/ruff), branching model (trunk / git-flow / GitHub flow), commit convention (Conventional Commits + scopes), PR title convention → generates `instructions/conventions.md`, a `commit-and-pr` skill, a `commit-msg-lint` hook + emitted `lefthook.yml` snippet, a `linting` skill
-- **Spec-driven development**: `/plan` + `/spec` commands, `sdd-workflow` skill, folder conventions; presets `sdd-light` / `sdd-full`
-- Custom skill builder producing agentskills.io-valid `SKILL.md`
+- ✅ `loadout wizard` (alias `create`) — guided questionnaire → generated artifacts; single question schema (`internal/wizard/schema.go`) shared by CLI (charmbracelet/huh) and, later, TUI and web
+- ✅ Sections: profile (app types, languages) · toolchain (tools + versions, package managers, docker) · standards (inline vs referenced) · targets (which agents)
+- ✅ **Engineering conventions**: githooks (lefthook + which hooks), linters (golangci-lint/gofumpt/eslint/prettier/ruff), branching model (trunk / GitHub flow / git-flow), commit convention (Conventional Commits ± required scopes), PR title convention → generates `instructions/conventions.md`, a `commit-and-pr` skill with the validation regex + a ready `lefthook.yml` in `references/`, and a `linting` skill
+- ✅ **Spec-driven development**: `/plan` + `/spec` commands (light or full template), `sdd-workflow` skill, `instructions/sdd.md`
+- ✅ Non-interactive: `--preset go-cli|web-app`, `--answers file.yaml` (validated against the schema), `--yes`; store writes are confirmation-gated; existing artifacts skipped, never overwritten
+- ✅ Engine fix uncovered by M5: multiple managed blocks merging into the same file within one sync now compose instead of clobbering each other (permanent regression test)
+- ⏳ Custom skill builder (freeform task → agentskills.io-valid SKILL.md) — lands with the web `/builder` where the UX fits; `loadout new skill` covers scaffolding meanwhile
 
 ## M6 — TUI ⏳ (v0.6.0)
 

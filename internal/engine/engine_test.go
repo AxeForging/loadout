@@ -262,6 +262,37 @@ func TestInstruction_StoreEditFlowsIntoBlockOnResync(t *testing.T) {
 	}
 }
 
+func TestInstruction_MultipleBlocksInSameFileAllSurviveOneSync(t *testing.T) {
+	// Regression: each block-merge item used to compute its merge against the
+	// original disk content, so applying several instructions to the same
+	// CLAUDE.md left only the last block.
+	env := newTestEnv(t)
+	for _, id := range []string{"one", "two", "three"} {
+		if _, err := env.store.New(domain.KindInstruction, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env.applyAll(t)
+
+	raw, err := os.ReadFile(filepath.Join(env.home, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"one", "two", "three"} {
+		if !strings.Contains(string(raw), "<!-- loadout:begin "+id+" -->") {
+			t.Errorf("block %q missing after combined sync:\n%s", id, raw)
+		}
+	}
+
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Changes()) != 0 {
+		t.Errorf("second plan should be a full noop, got %v", plan.Changes())
+	}
+}
+
 func TestHook_InstallMergesSettingsWithoutClobberingUserSettings(t *testing.T) {
 	env := newTestEnv(t)
 	settingsPath := filepath.Join(env.home, "settings.json")

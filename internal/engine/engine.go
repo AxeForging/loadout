@@ -124,6 +124,11 @@ func (e *Engine) Plan(ctx context.Context, f Filter) (*Plan, error) {
 		return nil, fmt.Errorf("load state: %w", err)
 	}
 	p := &Plan{}
+	// pending threads the evolving desired content through plan items that
+	// merge into the same file (e.g. several instruction blocks in one
+	// CLAUDE.md), so later items build on earlier ones instead of clobbering
+	// them at apply time.
+	pending := map[string][]byte{}
 
 	for _, ad := range e.Registry.All() {
 		if !f.wantsAgent(ad.ID()) {
@@ -156,7 +161,7 @@ func (e *Engine) Plan(ctx context.Context, f Filter) (*Plan, error) {
 				return nil, fmt.Errorf("render %s for %s: %w", art.ID, ad.ID(), err)
 			}
 			for _, tf := range targets {
-				item, err := e.buildItem(ad.ID(), det.Home, art, tf, st)
+				item, err := e.buildItem(ad.ID(), det.Home, art, tf, st, pending)
 				if err != nil {
 					return nil, err
 				}
@@ -167,17 +172,22 @@ func (e *Engine) Plan(ctx context.Context, f Filter) (*Plan, error) {
 	return p, nil
 }
 
-func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifact, tf adapter.TargetFile, st state) (Item, error) {
+func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifact, tf adapter.TargetFile, st state, pending map[string][]byte) (Item, error) {
 	abs := filepath.Join(home, filepath.FromSlash(tf.RelPath))
-	current, err := os.ReadFile(abs)
-	exists := err == nil
-	if err != nil && !os.IsNotExist(err) {
-		return Item{}, fmt.Errorf("read %s: %w", abs, err)
+	current, exists := pending[abs]
+	if !exists {
+		var err error
+		current, err = os.ReadFile(abs)
+		exists = err == nil
+		if err != nil && !os.IsNotExist(err) {
+			return Item{}, fmt.Errorf("read %s: %w", abs, err)
+		}
 	}
 	desired, err := merged(tf.Merge, current, tf.Content)
 	if err != nil {
 		return Item{}, fmt.Errorf("%s (%s): %w", tf.RelPath, art.ID, err)
 	}
+	pending[abs] = desired
 
 	op := OpNoop
 	switch {

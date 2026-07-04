@@ -1,0 +1,18 @@
+# Preset: Go CLI tooling team (AxeForging-style conventions)
+profile.appTypes: [cli, api]
+profile.languages: [go]
+toolchain.tools: "Go 1.24"
+toolchain.packageManagers: [go-modules]
+toolchain.docker: true
+toolchain.compose: true
+standards.mode: inline
+conv.lefthook: true
+conv.hooks: [fmt, lint, commit-msg]
+conv.linters: [golangci-lint, gofumpt]
+conv.branching: github-flow
+conv.commits: conventional
+conv.prTitles: conventional
+sdd.enable: true
+sdd.folder: docs/specs
+sdd.style: light
+targets.agents: [all]

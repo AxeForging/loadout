@@ -1,0 +1,18 @@
+# Preset: TypeScript web application team
+profile.appTypes: [web, api]
+profile.languages: [typescript]
+toolchain.tools: "Node 22, pnpm 9, Vite 6"
+toolchain.packageManagers: [pnpm]
+toolchain.docker: true
+toolchain.compose: true
+standards.mode: inline
+conv.lefthook: true
+conv.hooks: [fmt, lint, test, commit-msg]
+conv.linters: [eslint, prettier]
+conv.branching: github-flow
+conv.commits: conventional
+conv.prTitles: conventional
+sdd.enable: true
+sdd.folder: docs/specs
+sdd.style: full
+targets.agents: [all]

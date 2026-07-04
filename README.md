@@ -49,6 +49,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
 | `loadout bundle export [--archive]` | Export the whole store as a shareable directory or `.loadout.tar.gz` |
 | `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
+| `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--answers`, `--yes`) |
 | `loadout agents` | List supported agents and whether they are installed |
 | `loadout doctor` | Verify the store, agent homes, managed-block markers and install state |
 | `loadout version` | Print build version information |
@@ -115,6 +116,17 @@ updates:
   checkOnRun: true     # after status/sync, print at most one hint line
   intervalHours: 24    # cache window; failures are always silent
 ```
+
+## The wizard — conventions in, artifacts out
+
+`loadout wizard` interviews you about what you build (app types, languages, toolchain, docker), your **engineering conventions** (lefthook git hooks, linters, branching model, commit convention, PR-title convention) and whether you want **spec-driven development**, then generates ready-to-sync artifacts:
+
+- `core`, `toolchain`, `conventions` instructions (managed blocks in every agent's instruction file)
+- a `commit-and-pr` skill — commit/branch/PR rules with the validation regex, plus a ready `lefthook.yml` in its references
+- a `linting` skill with run/fix commands per linter, and `docker-workflows` if you use docker
+- `/plan` + `/spec` commands and an `sdd-workflow` skill (light or full spec templates)
+
+Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them.
 
 ## Bundles — share your whole setup
 

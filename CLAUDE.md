@@ -35,6 +35,7 @@ loadout/
 │   ├── engine/                 # Plan/Status/Apply, merge strategies, drift classification, state lockfile
 │   ├── source/                 # External git skill repos: sources.lock.yaml, discovery, check/update (system git via exec)
 │   ├── bundle/                 # Shareable bundles: export (dir/tar.gz) + validated, gated import
+│   ├── wizard/                 # Builder questionnaire: schema (single source of truth), answers, generators, embedded presets
 │   ├── config/                 # loadout's own config + platform paths
 │   ├── build/info.go           # Version info injected at build time
 │   └── logging/logging.go      # Zerolog setup
