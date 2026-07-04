@@ -19,7 +19,9 @@ func Commands() []*cli.Command {
 		syncCmd(),
 		installCmd(),
 		newCmd(),
+		addCmd(),
 		agentsCmd(),
+		doctorCmd(),
 		versionCmd(),
 		completionCmd(),
 	}

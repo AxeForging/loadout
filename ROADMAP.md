@@ -12,14 +12,14 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ CLI: `init` · `status` · `diff` · `sync` · `install` · `new` · `agents` · `version` · `completion`
 - ✅ Full CI: conventional-commit gate, reviewforge, structlint, golangci-lint v2, race tests, integration suite, goreleaser + releaseforge
 
-## M2 — All adapters + doctor + adopt 🚧 (v0.2.0)
+## M2 — All adapters + doctor + adopt ✅ (v0.2.0)
 
-- Codex adapter: skills → `~/.codex/skills/`, instructions → managed block in `~/.codex/AGENTS.md`, commands rendered as skills (native prompts are deprecated)
-- Gemini CLI adapter: skills → `~/.gemini/skills/`, instructions → `~/.gemini/GEMINI.md` block, commands as skills, settings → `settings.json` JSON-merge
-- Antigravity adapter: skills → `~/.gemini/antigravity-cli/skills/`, instructions via the shared `GEMINI.md`
-- Cursor adapter: skills → `~/.cursor/skills/`, commands as skills (Cursor treats skills as slash-capable)
-- `loadout doctor`: verify agent homes on this machine, artifact paths and hook specs in the store, balanced managed-block markers, orphaned state records
-- `loadout add <path>`: adopt an existing native artifact (skill dir, command/instruction file, hook dir) into the store
+- ✅ Codex adapter: skills → `~/.codex/skills/`, instructions → managed block in `~/.codex/AGENTS.md`, commands rendered as skills (native prompts are deprecated)
+- ✅ Gemini CLI adapter: skills → `~/.gemini/skills/`, instructions → `~/.gemini/GEMINI.md` block, commands as skills, settings → `settings.json` JSON-merge
+- ✅ Antigravity adapter: skills → `~/.gemini/antigravity-cli/skills/`, instructions via the shared `GEMINI.md`
+- ✅ Cursor adapter: skills → `~/.cursor/skills/`, commands as skills (Cursor treats skills as slash-capable)
+- ✅ `loadout doctor`: verify agent homes on this machine, artifact paths and hook specs in the store, balanced managed-block markers, orphaned state records
+- ✅ `loadout add <path>`: adopt an existing native artifact (skill dir, command/instruction file, hook dir) into the store
 - Deferred from this milestone (tracked below): Codex `config.toml` merge (a TOML rewrite would destroy user comments — needs a comment-preserving strategy), Cursor `.mdc` rules and Antigravity workflows (project-scoped; loadout manages global homes until project-scope support lands)
 
 ## M3 — External sources ⏳ (v0.3.0)

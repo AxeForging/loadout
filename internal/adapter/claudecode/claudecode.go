@@ -10,12 +10,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/domain"
-	"github.com/goccy/go-yaml"
 )
 
 // hookEvents maps canonical hook events to Claude Code's native names.
@@ -89,21 +86,7 @@ func (a *Adapter) Render(art domain.Artifact, content domain.Content) ([]adapter
 }
 
 func renderSkill(art domain.Artifact, content domain.Content) []adapter.TargetFile {
-	out := make([]adapter.TargetFile, 0, len(content.Files))
-	for rel, raw := range content.Files {
-		mode := os.FileMode(0o644)
-		if strings.HasPrefix(rel, "scripts/") || strings.HasSuffix(rel, ".sh") {
-			mode = 0o755
-		}
-		out = append(out, adapter.TargetFile{
-			RelPath: path.Join("skills", art.ID, rel),
-			Content: raw,
-			Mode:    mode,
-			Merge:   adapter.MergeReplace,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].RelPath < out[j].RelPath })
-	return out
+	return adapter.SkillFiles("skills", art, content)
 }
 
 func renderInstruction(art domain.Artifact, content domain.Content) ([]adapter.TargetFile, error) {
@@ -176,13 +159,9 @@ func renderHook(art domain.Artifact, content domain.Content) ([]adapter.TargetFi
 }
 
 func renderSettings(content domain.Content) ([]adapter.TargetFile, error) {
-	raw, ok := content.Files["claude-code.yaml"]
-	if !ok {
-		return nil, fmt.Errorf("settings fragment: missing claude-code.yaml")
-	}
-	fragment, err := yaml.YAMLToJSON(raw)
-	if err != nil {
-		return nil, fmt.Errorf("settings fragment: %w", err)
+	fragment, err := adapter.SettingsFragment("claude-code.yaml", content)
+	if err != nil || fragment == nil {
+		return nil, err
 	}
 	return []adapter.TargetFile{{
 		RelPath: "settings.json",

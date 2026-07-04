@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"sort"
 )
 
 // Managed-block sentinels. Every adapter that renders into a shared text file
@@ -73,6 +74,43 @@ func UpsertBlock(doc, fragment []byte) ([]byte, error) {
 	buf.Write(fragment)
 	buf.WriteByte('\n')
 	return buf.Bytes(), nil
+}
+
+var (
+	anyBeginRe = regexp.MustCompile(`<!-- loadout:begin ([a-z0-9-]+) -->`)
+	anyEndRe   = regexp.MustCompile(`<!-- loadout:end ([a-z0-9-]+) -->`)
+)
+
+// CheckBlocks reports structural problems with the managed blocks in a
+// document: begin markers without a matching end, ends without a begin, and
+// duplicated blocks. An empty result means the document is healthy.
+func CheckBlocks(doc []byte) []string {
+	begins := map[string]int{}
+	ends := map[string]int{}
+	for _, m := range anyBeginRe.FindAllSubmatch(doc, -1) {
+		begins[string(m[1])]++
+	}
+	for _, m := range anyEndRe.FindAllSubmatch(doc, -1) {
+		ends[string(m[1])]++
+	}
+	var problems []string
+	for id, n := range begins {
+		switch {
+		case ends[id] < n && ends[id] == 0:
+			problems = append(problems, fmt.Sprintf("block %q has no end marker", id))
+		case ends[id] < n:
+			problems = append(problems, fmt.Sprintf("block %q has %d begin marker(s) but %d end marker(s)", id, n, ends[id]))
+		case n > 1:
+			problems = append(problems, fmt.Sprintf("block %q appears %d times", id, n))
+		}
+	}
+	for id, n := range ends {
+		if begins[id] < n {
+			problems = append(problems, fmt.Sprintf("block %q has an end marker without a begin", id))
+		}
+	}
+	sort.Strings(problems)
+	return problems
 }
 
 // ExtractBlock returns the managed block (markers included) for id, or nil.

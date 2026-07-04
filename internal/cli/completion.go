@@ -43,7 +43,7 @@ func completionCmd() *cli.Command {
 const bashCompletion = `# loadout bash completion
 _loadout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="init status diff sync install new agents version completion"
+    local commands="init status diff sync install new add agents doctor version completion"
     COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
 }
 complete -F _loadout loadout
@@ -59,7 +59,9 @@ _loadout() {
         'sync:Install or update artifacts in agent homes'
         'install:First-time full install into one agent'
         'new:Scaffold a new artifact in the store'
+        'add:Adopt an existing native artifact into the store'
         'agents:List supported agents'
+        'doctor:Verify store, agent homes, blocks and state'
         'version:Print version information'
         'completion:Generate shell completion scripts'
     )
@@ -76,7 +78,9 @@ complete -c loadout -n '__fish_use_subcommand' -a diff        -d 'Show what sync
 complete -c loadout -n '__fish_use_subcommand' -a sync        -d 'Install or update artifacts in agent homes'
 complete -c loadout -n '__fish_use_subcommand' -a install     -d 'First-time full install into one agent'
 complete -c loadout -n '__fish_use_subcommand' -a new         -d 'Scaffold a new artifact in the store'
+complete -c loadout -n '__fish_use_subcommand' -a add         -d 'Adopt an existing native artifact into the store'
 complete -c loadout -n '__fish_use_subcommand' -a agents      -d 'List supported agents'
+complete -c loadout -n '__fish_use_subcommand' -a doctor      -d 'Verify store, agent homes, blocks and state'
 complete -c loadout -n '__fish_use_subcommand' -a version     -d 'Print version information'
 complete -c loadout -n '__fish_use_subcommand' -a completion  -d 'Generate shell completion scripts'
 `

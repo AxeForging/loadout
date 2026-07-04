@@ -9,7 +9,7 @@ Skills use the open [Agent Skills](https://agentskills.io) standard (`SKILL.md`)
 Agent configs are fragmented across `~/.claude`, `~/.codex`, `~/.gemini`, `~/.cursor` and project `.agents/` directories: no sync, no versioning, no team-sharing, no reinstall story. loadout treats them like dotfiles with a package manager on top:
 
 - **One canonical store** — a plain directory (and git repo) holding your whole setup.
-- **Pluggable adapters** — install into Claude Code today; Codex, Gemini CLI, Antigravity and Cursor next.
+- **Pluggable adapters** — install into Claude Code, Codex, Gemini CLI, Antigravity and Cursor.
 - **Drift detection** — see per artifact and per agent what is in sync, edited on disk, updated in the store, or missing.
 - **Never writes without asking** — every apply goes through a confirmation gate; user-authored content outside loadout's managed blocks is never touched.
 
@@ -41,7 +41,9 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`) |
 | `loadout install <agent>` | First-time full install into one agent |
 | `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command` or `hook` in the store |
+| `loadout add <path>` | Adopt an existing native artifact (skill/hook dir, command/instruction file) into the store |
 | `loadout agents` | List supported agents and whether they are installed |
+| `loadout doctor` | Verify the store, agent homes, managed-block markers and install state |
 | `loadout version` | Print build version information |
 | `loadout completion <shell>` | Shell completion scripts (bash, zsh, fish) |
 
@@ -88,13 +90,15 @@ Everything outside the markers is preserved byte-for-byte. Hooks and settings fr
 
 ## Supported agents
 
-| Agent | Status |
-|-------|--------|
-| Claude Code | ✔ skills, instructions, commands, hooks, settings |
-| Codex | planned |
-| Gemini CLI | planned |
-| Antigravity | planned |
-| Cursor | planned |
+| Agent | Skills | Instructions | Commands | Hooks | Settings |
+|-------|--------|--------------|----------|-------|----------|
+| Claude Code | ✔ `~/.claude/skills/` | ✔ `CLAUDE.md` block | ✔ `commands/` | ✔ script + `settings.json` merge | ✔ JSON merge |
+| Codex | ✔ `~/.codex/skills/` | ✔ `AGENTS.md` block | ✔ as skill | — | — (`config.toml` merge parked: comment-preserving TOML needed) |
+| Gemini CLI | ✔ `~/.gemini/skills/` | ✔ `GEMINI.md` block | ✔ as skill | — | ✔ JSON merge |
+| Antigravity | ✔ `~/.gemini/antigravity-cli/skills/` | ✔ shared `GEMINI.md` | project-scoped (roadmap) | — | — |
+| Cursor | ✔ `~/.cursor/skills/` | project-scoped `.mdc` rules (roadmap) | ✔ as skill | — | — |
+
+Commands render "as skill" on agents whose slash commands are backed by the Agent Skills standard. Unsupported cells show as `n/a` in `loadout status` — nothing is silently skipped.
 
 ## Roadmap
 

@@ -313,6 +313,33 @@ func TestPlan_SkipsAgentWhoseHomeIsMissing(t *testing.T) {
 	}
 }
 
+func TestOrphanedState_ReportsRecordsForRemovedArtifacts(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "keeper")
+	env.addSkill(t, "goner")
+	env.applyAll(t)
+
+	// Remove "goner" from the manifest, as a user editing loadout.yaml would.
+	var kept []domain.Artifact
+	for _, a := range env.store.Manifest.Artifacts {
+		if a.ID != "goner" {
+			kept = append(kept, a)
+		}
+	}
+	env.store.Manifest.Artifacts = kept
+
+	orphans, err := env.eng.OrphanedState()
+	if err != nil {
+		t.Fatalf("OrphanedState() error = %v", err)
+	}
+	if len(orphans) != 1 || orphans[0].Artifact != "goner" {
+		t.Fatalf("orphans = %v, want exactly goner", orphans)
+	}
+	if len(orphans[0].Files) == 0 {
+		t.Error("orphan should list its installed files")
+	}
+}
+
 func TestPlan_FilterLimitsArtifacts(t *testing.T) {
 	env := newTestEnv(t)
 	env.addSkill(t, "one")

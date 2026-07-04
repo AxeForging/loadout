@@ -7,7 +7,11 @@ import (
 	"strings"
 
 	"github.com/AxeForging/loadout/internal/adapter"
+	"github.com/AxeForging/loadout/internal/adapter/antigravity"
 	"github.com/AxeForging/loadout/internal/adapter/claudecode"
+	"github.com/AxeForging/loadout/internal/adapter/codex"
+	"github.com/AxeForging/loadout/internal/adapter/cursor"
+	"github.com/AxeForging/loadout/internal/adapter/geminicli"
 	"github.com/AxeForging/loadout/internal/config"
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/engine"
@@ -20,6 +24,10 @@ import (
 func newRegistry() *adapter.Registry {
 	r := adapter.NewRegistry()
 	r.Register(claudecode.New())
+	r.Register(codex.New())
+	r.Register(geminicli.New())
+	r.Register(antigravity.New())
+	r.Register(cursor.New())
 	return r
 }
 

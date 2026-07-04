@@ -69,6 +69,25 @@ func TestUpsertBlock_FailsOnUnterminatedBlock(t *testing.T) {
 	}
 }
 
+func TestCheckBlocks_ReportsUnbalancedAndDuplicateMarkers(t *testing.T) {
+	healthy, _ := UpsertBlock(nil, WrapBlock("ok", []byte("fine")))
+	if issues := CheckBlocks(healthy); len(issues) != 0 {
+		t.Errorf("healthy doc reported issues: %v", issues)
+	}
+
+	broken := []byte("<!-- loadout:begin dangling -->\nno end\n")
+	issues := CheckBlocks(broken)
+	if len(issues) != 1 || !strings.Contains(issues[0], "dangling") {
+		t.Errorf("missing-end not reported: %v", issues)
+	}
+
+	orphanEnd := []byte("text\n<!-- loadout:end ghost -->\n")
+	issues = CheckBlocks(orphanEnd)
+	if len(issues) != 1 || !strings.Contains(issues[0], "ghost") {
+		t.Errorf("end-without-begin not reported: %v", issues)
+	}
+}
+
 func TestExtractBlock_ReturnsNilWhenAbsent(t *testing.T) {
 	if got := ExtractBlock([]byte("nothing here"), "style"); got != nil {
 		t.Errorf("ExtractBlock() = %q, want nil", got)
