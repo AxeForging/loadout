@@ -2,6 +2,19 @@
 
 loadout is built in shippable milestones — every milestone leaves `main` releasable. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 
+## Where we are
+
+| | Milestone | Status |
+|---|-----------|--------|
+| M1 | Core store + sync engine + Claude Code adapter | ✅ shipped |
+| M2 | All five agent adapters + `doctor` + `add` | ✅ shipped |
+| M3 | External git skill sources (pinned, gated updates) | ✅ shipped |
+| M4 | Shareable bundles (export/import) | ✅ shipped — **released as v0.4.0** |
+| M5 | Builder wizard (conventions + SDD presets) | 🚧 in progress |
+| M6 | TUI dashboard | ⏳ |
+| M7 | Embedded web UI (React SPA) | ⏳ |
+| M8 | v1.0 hardening | ⏳ |
+
 ## M1 — Core + Claude Code adapter ✅ (v0.1.0)
 
 - ✅ Canonical git-friendly store: `loadout.yaml` manifest + `skills/`, `instructions/`, `commands/`, `hooks/`, `settings/`

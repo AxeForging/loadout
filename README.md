@@ -4,6 +4,8 @@ Your agentic gear kit. loadout keeps AI-agent configs — skills, instructions, 
 
 Skills use the open [Agent Skills](https://agentskills.io) standard (`SKILL.md`), so the canonical format is the native format: loadout places them, tracks them, and keeps them in sync everywhere.
 
+**Current release: v0.4.0** — canonical store, sync engine with drift detection, all five agent adapters, external git sources, and shareable bundles. In progress: builder wizard, TUI, web UI ([ROADMAP.md](ROADMAP.md)).
+
 ## Why
 
 Agent configs are fragmented across `~/.claude`, `~/.codex`, `~/.gemini`, `~/.cursor` and project `.agents/` directories: no sync, no versioning, no team-sharing, no reinstall story. loadout treats them like dotfiles with a package manager on top:
