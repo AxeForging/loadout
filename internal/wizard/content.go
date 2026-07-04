@@ -25,7 +25,7 @@ func labelOf(questionID, value string) string {
 }
 
 func labelsOf(a Answers, questionID string) []string {
-	values := a.List(questionID)
+	values := a.EffectiveList(questionID)
 	out := make([]string, 0, len(values))
 	for _, v := range values {
 		out = append(out, labelOf(questionID, v))
@@ -160,7 +160,7 @@ func lefthookSnippet(a Answers) string {
 	b.WriteString("# Install: go install github.com/evilmartians/lefthook@latest && lefthook install\n\n")
 
 	hooks := a.List("conv.hooks")
-	linters := a.List("conv.linters")
+	linters := a.EffectiveList("conv.linters")
 	pre := []string{}
 	if contains(hooks, "fmt") {
 		if contains(linters, "gofumpt") {
@@ -212,7 +212,7 @@ commit-msg:
 func lintingSkill(a Answers) string {
 	var b strings.Builder
 	b.WriteString("---\nname: linting\ndescription: Which linters this team uses and how to run and fix them. Use before pushing or when lint errors appear.\n---\n\n# Linting\n\n")
-	for _, l := range a.List("conv.linters") {
+	for _, l := range a.EffectiveList("conv.linters") {
 		switch l {
 		case "golangci-lint":
 			b.WriteString("## golangci-lint (Go)\n\n- Run: `golangci-lint run --timeout=5m`\n- Config lives in `.golangci.yml`; treat every finding as a failure.\n\n")
@@ -224,6 +224,10 @@ func lintingSkill(a Answers) string {
 			b.WriteString("## Prettier\n\n- Check: `npx prettier --check .` — write: `npx prettier --write .`\n\n")
 		case "ruff":
 			b.WriteString("## Ruff (Python)\n\n- Run: `ruff check .` — fix: `ruff check . --fix`; format: `ruff format .`\n\n")
+		case "other":
+			// No free-text value given — nothing specific to document.
+		default:
+			fmt.Fprintf(&b, "## %s\n\n- Run/fix commands: document how this team invokes %s.\n\n", l, l)
 		}
 	}
 	b.WriteString("Run the relevant linters before every push; CI runs them all and fails on any finding.\n")
@@ -354,7 +358,7 @@ func testingInstruction(a Answers) string {
 	levels := a.List("quality.levels")
 	if contains(levels, "unit") {
 		b.WriteString("## Unit tests\n\n")
-		for _, tool := range a.List("quality.unitTools") {
+		for _, tool := range a.EffectiveList("quality.unitTools") {
 			switch tool {
 			case "go-testing":
 				b.WriteString("- Go: stdlib `testing` only (no assertion frameworks); table tests where natural; `t.TempDir()` for filesystem; run `go test -race ./...`.\n")
@@ -364,6 +368,10 @@ func testingInstruction(a Answers) string {
 				b.WriteString("- TS/JS: Jest — colocate `*.test.ts`; run `npm test`.\n")
 			case "pytest":
 				b.WriteString("- Python: pytest — `tests/` mirrors package layout; run `pytest -q`.\n")
+			case "other":
+				// No free-text value given — nothing specific to document.
+			default:
+				fmt.Fprintf(&b, "- %s: document this team's conventions for it.\n", tool)
 			}
 		}
 		b.WriteString("\n")
