@@ -13,6 +13,12 @@ import (
 // ~/.claude/skills/) into the store and registers it in the manifest. The
 // source is never modified.
 func (s *Store) Adopt(kind domain.ArtifactKind, name, src string) (domain.Artifact, error) {
+	return s.AdoptFrom(kind, name, src, "local")
+}
+
+// AdoptFrom is Adopt with an explicit origin (e.g. "source:<name>" for
+// artifacts imported from an external repository).
+func (s *Store) AdoptFrom(kind domain.ArtifactKind, name, src, origin string) (domain.Artifact, error) {
 	if err := ValidateName(name); err != nil {
 		return domain.Artifact{}, err
 	}
@@ -54,12 +60,18 @@ func (s *Store) Adopt(kind domain.ArtifactKind, name, src string) (domain.Artifa
 		ID:     name,
 		Kind:   kind,
 		Path:   filepath.ToSlash(relPath),
-		Origin: "local",
+		Origin: origin,
 	}
 	if err := s.AddArtifact(a); err != nil {
 		return domain.Artifact{}, err
 	}
 	return a, nil
+}
+
+// CopyTree copies a directory recursively, preserving file modes. Used by
+// source updates to refresh imported artifacts in place.
+func CopyTree(src, dst string) error {
+	return copyDir(src, dst)
 }
 
 func copyDir(src, dst string) error {

@@ -40,6 +40,7 @@ func statusCmd() *cli.Command {
 				return err
 			}
 			printSkips(plan)
+			maybeUpdateHint(ctx, cmd)
 			return nil
 		},
 	}

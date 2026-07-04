@@ -43,7 +43,7 @@ func completionCmd() *cli.Command {
 const bashCompletion = `# loadout bash completion
 _loadout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="init status diff sync install new add agents doctor version completion"
+    local commands="init status diff sync install new add source check update agents doctor version completion"
     COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
 }
 complete -F _loadout loadout
@@ -60,6 +60,9 @@ _loadout() {
         'install:First-time full install into one agent'
         'new:Scaffold a new artifact in the store'
         'add:Adopt an existing native artifact into the store'
+        'source:Track skills from external git repositories'
+        'check:Check sources for updates (non-intrusive)'
+        'update:Fetch and apply source updates (gated)'
         'agents:List supported agents'
         'doctor:Verify store, agent homes, blocks and state'
         'version:Print version information'
@@ -79,6 +82,9 @@ complete -c loadout -n '__fish_use_subcommand' -a sync        -d 'Install or upd
 complete -c loadout -n '__fish_use_subcommand' -a install     -d 'First-time full install into one agent'
 complete -c loadout -n '__fish_use_subcommand' -a new         -d 'Scaffold a new artifact in the store'
 complete -c loadout -n '__fish_use_subcommand' -a add         -d 'Adopt an existing native artifact into the store'
+complete -c loadout -n '__fish_use_subcommand' -a source      -d 'Track skills from external git repositories'
+complete -c loadout -n '__fish_use_subcommand' -a check       -d 'Check sources for updates (non-intrusive)'
+complete -c loadout -n '__fish_use_subcommand' -a update      -d 'Fetch and apply source updates (gated)'
 complete -c loadout -n '__fish_use_subcommand' -a agents      -d 'List supported agents'
 complete -c loadout -n '__fish_use_subcommand' -a doctor      -d 'Verify store, agent homes, blocks and state'
 complete -c loadout -n '__fish_use_subcommand' -a version     -d 'Print version information'

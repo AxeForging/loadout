@@ -102,6 +102,23 @@ const (
 	StateUnsupported  SyncState = "n/a"
 )
 
+// SourceRef pins one external git repository providing artifacts. The lock
+// list lives in the store (sources.lock.yaml) so a shared store reproduces
+// the same sources everywhere.
+type SourceRef struct {
+	Name string `yaml:"name"`
+	URL  string `yaml:"url"`
+	// Ref is a branch or tag; empty means the remote default branch.
+	Ref string `yaml:"ref,omitempty"`
+	// Commit is the pinned revision artifacts were imported from.
+	Commit string `yaml:"commit"`
+	// Subdir limits discovery to a subdirectory of the repository.
+	Subdir string `yaml:"subdir,omitempty"`
+}
+
+// OriginSource formats the artifact origin for a named source.
+func OriginSource(name string) string { return "source:" + name }
+
 // HookSpec is the canonical hook definition (hooks/<name>/hook.yaml).
 type HookSpec struct {
 	// Event is the agent-agnostic hook event, e.g. "pre-tool", "post-tool",

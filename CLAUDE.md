@@ -33,6 +33,7 @@ loadout/
 │   ├── adapter/                # Adapter interface + registry + managed-block helpers
 │   │   └── claudecode/         # One package per agent
 │   ├── engine/                 # Plan/Status/Apply, merge strategies, drift classification, state lockfile
+│   ├── source/                 # External git skill repos: sources.lock.yaml, discovery, check/update (system git via exec)
 │   ├── config/                 # loadout's own config + platform paths
 │   ├── build/info.go           # Version info injected at build time
 │   └── logging/logging.go      # Zerolog setup
@@ -40,7 +41,9 @@ loadout/
 └── Makefile
 ```
 
-Import direction: `domain` imports nothing local; `store` and `adapter/*` import `domain` only; adapters never import `engine`, `store` or each other; `engine` imports `domain`/`store`/`adapter`; `cli` orchestrates everything; nothing imports `cli`.
+Import direction: `domain` imports nothing local; `store` and `adapter/*` import `domain` only; adapters never import `engine`, `store` or each other; `engine` imports `domain`/`store`/`adapter`; `source` imports `domain`/`store`; `cli` orchestrates everything; nothing imports `cli`.
+
+Git rule: all git invocations shell out to the system `git` (never go-git) so user credentials (SSH agent, credential helpers) just work and loadout never stores secrets. Always pass `GIT_TERMINAL_PROMPT=0`.
 
 ---
 

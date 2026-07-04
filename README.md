@@ -42,6 +42,9 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout install <agent>` | First-time full install into one agent |
 | `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command` or `hook` in the store |
 | `loadout add <path>` | Adopt an existing native artifact (skill/hook dir, command/instruction file) into the store |
+| `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
+| `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
+| `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
 | `loadout agents` | List supported agents and whether they are installed |
 | `loadout doctor` | Verify the store, agent homes, managed-block markers and install state |
 | `loadout version` | Print build version information |
@@ -87,6 +90,27 @@ Instructions render into agents' global instruction files (e.g. `~/.claude/CLAUD
 ```
 
 Everything outside the markers is preserved byte-for-byte. Hooks and settings fragments deep-merge into `settings.json` instead of replacing it.
+
+## External sources
+
+Track skill repos (yours, your team's, public collections) and stay pinned:
+
+```bash
+loadout source add git@github.com:acme/team-skills.git
+loadout check            # ls-remote only — never fetches or applies
+loadout update           # shows changelog + per-skill diff, asks, applies to the STORE
+loadout sync             # then rolls the store out to your agents (asks again)
+```
+
+Pins live in `sources.lock.yaml` inside the store, so a shared store reproduces the exact same skill versions everywhere. Git operations shell out to your system `git` — private repos work through your existing SSH agent or credential helper, and loadout never stores credentials. Skills you edited locally (origin `local`) are never overwritten by updates; skills that disappear upstream are kept and relabeled `local`, never deleted.
+
+Optional passive checking (off by default) in `~/.config/loadout/config.yaml`:
+
+```yaml
+updates:
+  checkOnRun: true     # after status/sync, print at most one hint line
+  intervalHours: 24    # cache window; failures are always silent
+```
 
 ## Supported agents
 

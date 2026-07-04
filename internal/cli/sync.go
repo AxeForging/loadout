@@ -65,5 +65,6 @@ func runSync(ctx context.Context, cmd *cli.Command, eng *engine.Engine, f engine
 		return err
 	}
 	fmt.Printf("Applied %d change(s).\n", n)
+	maybeUpdateHint(ctx, cmd)
 	return nil
 }

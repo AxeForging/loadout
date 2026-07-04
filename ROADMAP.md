@@ -22,14 +22,14 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ `loadout add <path>`: adopt an existing native artifact (skill dir, command/instruction file, hook dir) into the store
 - Deferred from this milestone (tracked below): Codex `config.toml` merge (a TOML rewrite would destroy user comments — needs a comment-preserving strategy), Cursor `.mdc` rules and Antigravity workflows (project-scoped; loadout manages global homes until project-scope support lands)
 
-## M3 — External sources ⏳ (v0.3.0)
+## M3 — External sources ✅ (v0.3.0)
 
-- `loadout source add|list|remove <url>` — track skills from external git repos (go-git)
-- `sources.lock.yaml` committed in the store: url, ref, pinned commit, subdir — reproducible and shareable
-- `loadout check` — non-intrusive update check (`git ls-remote`, no clone); opt-in `updates.checkOnRun` with cached results and a single hint line, never auto-apply
-- `loadout update [source]` — fetch, show commit log + artifact diff, permission-gated apply
-- Secrets for private sources: keyring (zalando/go-keyring) with 0600 file fallback
-- `skillsStrategy: shared-agents-dir` — install skills once into `~/.agents/skills/` for agents that read it (Cursor, Gemini CLI)
+- ✅ `loadout source add|list|remove <url>` — track skills from external git repos
+- ✅ `sources.lock.yaml` committed in the store: url, ref, pinned commit, subdir — reproducible and shareable
+- ✅ `loadout check` — non-intrusive update check (`git ls-remote`, no clone); opt-in `updates.checkOnRun` with cached results and a single hint line, never auto-apply
+- ✅ `loadout update [source]` — fetch, show commit log + artifact diff, permission-gated apply; user-owned (origin `local`) artifacts are never overwritten, upstream-removed skills are kept and relabeled
+- ✅ Design change vs. the original plan: git operations shell out to the **system git** instead of go-git — private repos authenticate through the user's existing SSH agent / credential helpers, so the keyring secrets package became unnecessary
+- ⏳ `skillsStrategy: shared-agents-dir` — install skills once into `~/.agents/skills/` for agents that read it (Cursor, Gemini CLI) — moved to M4
 
 ## M4 — Bundles ⏳ (v0.4.0)
 
