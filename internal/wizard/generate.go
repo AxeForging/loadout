@@ -67,6 +67,16 @@ type artifactSpec struct {
 }
 
 func artifactSpecs(a Answers) []artifactSpec {
+	// Command/skill names default to today's fixed IDs, but a team can
+	// rename any of them (e.g. /sdd-workflow -> /fe-sdd-workflow) — the
+	// custom name becomes both the store artifact ID and, for commands,
+	// the synced slash-command name.
+	handoffID := customName(a, "continuity.handoffCommandName", "handoff")
+	resumeID := customName(a, "continuity.resumeCommandName", "resume")
+	specID := customName(a, "sdd.specCommandName", "spec")
+	planID := customName(a, "sdd.planCommandName", "plan")
+	workflowID := customName(a, "sdd.workflowSkillName", "sdd-workflow")
+
 	specs := []artifactSpec{
 		{id: "core", kind: domain.KindInstruction, files: map[string]string{"": coreInstruction(a)}},
 		{id: "toolchain", kind: domain.KindInstruction, files: map[string]string{"": toolchainInstruction(a)}},
@@ -90,17 +100,17 @@ func artifactSpecs(a Answers) []artifactSpec {
 	}
 	if a.Bool("continuity.handoff") {
 		specs = append(specs,
-			artifactSpec{id: "handoff", kind: domain.KindCommand, files: map[string]string{"": handoffCommand()}},
-			artifactSpec{id: "resume", kind: domain.KindCommand, files: map[string]string{"": resumeCommand()}},
-			artifactSpec{id: "context-handoff", kind: domain.KindSkill, files: map[string]string{"SKILL.md": contextHandoffSkill()}},
+			artifactSpec{id: handoffID, kind: domain.KindCommand, files: map[string]string{"": handoffCommand()}},
+			artifactSpec{id: resumeID, kind: domain.KindCommand, files: map[string]string{"": resumeCommand(handoffID)}},
+			artifactSpec{id: "context-handoff", kind: domain.KindSkill, files: map[string]string{"SKILL.md": contextHandoffSkill(handoffID, resumeID)}},
 		)
 	}
 	if a.Bool("sdd.enable") {
 		specs = append(specs,
-			artifactSpec{id: "sdd", kind: domain.KindInstruction, files: map[string]string{"": sddInstruction(a)}},
-			artifactSpec{id: "plan", kind: domain.KindCommand, files: map[string]string{"": planCommand(a)}},
-			artifactSpec{id: "spec", kind: domain.KindCommand, files: map[string]string{"": specCommand(a)}},
-			artifactSpec{id: "sdd-workflow", kind: domain.KindSkill, files: map[string]string{"SKILL.md": sddWorkflowSkill(a)}},
+			artifactSpec{id: "sdd", kind: domain.KindInstruction, files: map[string]string{"": sddInstruction(a, specID, planID)}},
+			artifactSpec{id: planID, kind: domain.KindCommand, files: map[string]string{"": planCommand(a)}},
+			artifactSpec{id: specID, kind: domain.KindCommand, files: map[string]string{"": specCommand(a)}},
+			artifactSpec{id: workflowID, kind: domain.KindSkill, files: map[string]string{"SKILL.md": sddWorkflowSkill(a, workflowID, specID, planID, handoffID, resumeID)}},
 		)
 	}
 	return specs

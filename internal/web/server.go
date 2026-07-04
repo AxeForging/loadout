@@ -70,6 +70,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/sources/check", s.handleSourcesCheck)
 	s.mux.HandleFunc("GET /api/wizard/schema", s.handleWizardSchema)
 	s.mux.HandleFunc("GET /api/wizard/presets", s.handleWizardPresets)
+	s.mux.HandleFunc("GET /api/profiles", s.handleProfiles)
+	s.mux.HandleFunc("GET /api/profiles/{name}", s.handleProfileGet)
+	s.mux.HandleFunc("POST /api/profiles", s.handleProfileSave)
+	s.mux.HandleFunc("DELETE /api/profiles/{name}", s.handleProfileDelete)
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
@@ -420,6 +424,7 @@ func (s *Server) decodeAnswers(r *http.Request) (wizard.Answers, error) {
 	var req struct {
 		Answers wizard.Answers `json:"answers"`
 		Preset  string         `json:"preset"`
+		Profile string         `json:"profile"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return nil, fmt.Errorf("invalid request body: %w", err)
@@ -432,7 +437,68 @@ func (s *Server) decodeAnswers(r *http.Request) (wizard.Answers, error) {
 		}
 		answers = answers.Merge(preset)
 	}
+	if req.Profile != "" {
+		profile, err := wizard.LoadProfile(s.opts.Engine.Store, req.Profile)
+		if err != nil {
+			return nil, err
+		}
+		answers = answers.Merge(profile)
+	}
 	return answers.Merge(req.Answers).Validate()
+}
+
+func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
+	names, err := wizard.ListProfiles(s.opts.Engine.Store)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if names == nil {
+		names = []string{}
+	}
+	writeJSON(w, http.StatusOK, names)
+}
+
+func (s *Server) handleProfileGet(w http.ResponseWriter, r *http.Request) {
+	a, err := wizard.LoadProfile(s.opts.Engine.Store, r.PathValue("name"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (s *Server) handleProfileSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name    string         `json:"name"`
+		Answers wizard.Answers `json:"answers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	if req.Name == "" {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("name is required"))
+		return
+	}
+	answers, err := req.Answers.Validate()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := wizard.SaveProfile(s.opts.Engine.Store, req.Name, answers); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"name": req.Name})
+}
+
+func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
+	if err := wizard.RemoveProfile(s.opts.Engine.Store, r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
 
 func (s *Server) handleWizardPlan(w http.ResponseWriter, r *http.Request) {

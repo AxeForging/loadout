@@ -23,6 +23,14 @@ func wizardCmd() *cli.Command {
 				Name:  "answers",
 				Usage: "Answers YAML file (question ID → value) for non-interactive runs",
 			},
+			&cli.StringFlag{
+				Name:  "profile",
+				Usage: "Start from a saved profile (see 'loadout profile list') instead of the interactive questionnaire",
+			},
+			&cli.StringFlag{
+				Name:  "save-profile",
+				Usage: "Save the resulting answers as a named profile in the store for reuse across projects or teams",
+			},
 			&cli.BoolFlag{
 				Name:    "yes",
 				Aliases: []string{"y"},
@@ -53,6 +61,14 @@ func wizardCmd() *cli.Command {
 				answers = answers.Merge(loaded)
 				nonInteractive = true
 			}
+			if profile := cmd.String("profile"); profile != "" {
+				loaded, err := wizard.LoadProfile(s, profile)
+				if err != nil {
+					return err
+				}
+				answers = answers.Merge(loaded)
+				nonInteractive = true
+			}
 			if file := cmd.String("answers"); file != "" {
 				loaded, err := wizard.LoadAnswers(file)
 				if err != nil {
@@ -67,6 +83,13 @@ func wizardCmd() *cli.Command {
 					return err
 				}
 				answers = answers.Merge(collected)
+			}
+
+			if name := cmd.String("save-profile"); name != "" {
+				if err := wizard.SaveProfile(s, name, answers); err != nil {
+					return err
+				}
+				fmt.Printf("Saved profile %q — reuse it with 'loadout wizard --profile %s'.\n", name, name)
 			}
 
 			create, skip := wizard.Plan(s, answers)

@@ -59,7 +59,8 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
 | `loadout bundle export [--archive]` | Export the whole store as a shareable directory or `.loadout.tar.gz` |
 | `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
-| `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--answers`, `--yes`) |
+| `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`) |
+| `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
 | `loadout tui` (alias `dash`) | Interactive dashboard: drift matrix, store browser with preview, sources, diff view, gated sync |
 | `loadout serve` | Local web UI on `127.0.0.1:4600` — overview, store browser, drift matrix with diffs, sources, the Builder, bundle export |
 | `loadout agents` | List supported agents and whether they are installed |
@@ -131,7 +132,7 @@ updates:
 
 ## The wizard — conventions in, artifacts out
 
-`loadout wizard` interviews you about what you build (app types, languages, toolchain, docker), your **engineering conventions** (lefthook git hooks, linters, branching model, commit convention, PR-title convention), your **testing strategy** (which levels are mandatory — unit/component/integration/e2e — per framework and runner, plus a mocking policy) and whether you want **spec-driven development** and **cross-agent context handoff**. It generates ready-to-sync artifacts:
+`loadout wizard` interviews you about what you build (app types, languages, toolchain, docker), your **engineering conventions** (lefthook git hooks, linters, branching model, commit convention, PR-title convention), your **testing strategy** (which levels are mandatory — unit/component/integration/e2e — per framework and runner, plus a mocking policy) and whether you want **spec-driven development** and **cross-agent context handoff**. Wherever the built-in options (Go, TypeScript, Python; a handful of package managers, linters, unit-test runners) don't cover your stack, an "Other" free-text field takes any custom value straight into the generated docs. It generates ready-to-sync artifacts:
 
 - `core`, `toolchain`, `conventions`, `testing` instructions (managed blocks in every agent's instruction file)
 - a `commit-and-pr` skill — commit/branch/PR rules with the validation regex, plus a ready `lefthook.yml` in its references
@@ -141,11 +142,29 @@ updates:
 
 Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
 
+**Name the commands and skills yourself** — `/spec`, `/plan`, `/handoff`, `/resume` and the `sdd-workflow` skill each have a naming question (e.g. rename `sdd-workflow` to `fe-sdd-workflow` for a frontend-specific flow). Every generated cross-reference (the workflow skill mentioning `/plan`, the resume command's description, and so on) uses the name you chose — nothing is left pointing at the old one.
+
+**Tell it how aggressively to change your codebase** — `sdd.changeScope` (minimal / balanced / thorough) becomes a "Change scope" section in the generated `sdd-workflow` skill: *minimal* scopes every change to the fewest files, insists on reusing existing code over duplicating it, and favors several small reviewable PRs; *thorough* allows broader changes when they clearly help; *balanced* (default) is the middle ground.
+
 **Crash-safe by design** — `/plan` writes a checkbox-tracked plan file to disk next to the spec; a killed session (crash, restart, laptop closed) loses nothing, because `/resume` reads that file — not the conversation — and continues at the first unchecked step:
 
 <p align="center">
   <img src="docs/assets/sdd-demo.gif" alt="A live Claude Code session: /spec drafts a spec, /plan writes a persistent checklist to disk, the session is killed, and a brand-new session's /resume reads the same file and keeps going" width="820">
 </p>
+
+## Profiles — reuse your answers across projects and teams
+
+Presets (`go-cli`, `web-app`) are built in and read-only. Profiles are yours: save any wizard run's answers under a name, reuse them for the next repo, or commit them so your whole team starts from the same conventions.
+
+```bash
+loadout wizard --preset go-cli --save-profile acme-backend --yes   # save while generating
+loadout wizard --profile acme-backend --yes                        # reuse it elsewhere
+loadout profile list                                                # see what's saved
+loadout profile show acme-backend                                   # print its answers
+loadout profile rm acme-backend                                     # delete it
+```
+
+Profiles live at `store/profiles/<name>.yaml` — plain YAML in the canonical store, so they travel with it through git or a bundle. The web Builder has the same picker next to the preset chips, plus a "Save as profile" action on the review step.
 
 ## Context handoff — continue anywhere
 

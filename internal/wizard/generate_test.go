@@ -219,6 +219,133 @@ func TestGenerate_OtherFreeTextFlowsIntoGeneratedContent(t *testing.T) {
 	}
 }
 
+func TestGenerate_CustomCommandNamesPropagateToEveryCrossReference(t *testing.T) {
+	a := Answers{
+		"sdd.specCommandName":           "fe-spec",
+		"sdd.planCommandName":           "fe-plan",
+		"sdd.workflowSkillName":         "fe-sdd-workflow",
+		"continuity.handoffCommandName": "fe-handoff",
+		"continuity.resumeCommandName":  "fe-resume",
+	}
+	s := testStore(t)
+	g, err := Generate(s, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]bool{}
+	for _, art := range g.Created {
+		got[art.ID] = true
+	}
+	for _, id := range []string{"fe-spec", "fe-plan", "fe-sdd-workflow", "fe-handoff", "fe-resume"} {
+		if !got[id] {
+			t.Errorf("expected an artifact named %q, got IDs: %v", id, got)
+		}
+	}
+	// The old hardcoded IDs must not exist alongside the renamed ones.
+	for _, id := range []string{"spec", "plan", "sdd-workflow", "handoff", "resume"} {
+		if got[id] {
+			t.Errorf("unexpected artifact with the default ID %q when renamed", id)
+		}
+	}
+
+	workflow, ok := s.Artifact("fe-sdd-workflow")
+	if !ok {
+		t.Fatal("fe-sdd-workflow artifact missing")
+	}
+	content, err := s.Content(workflow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(content.Files["SKILL.md"])
+	for _, want := range []string{"name: fe-sdd-workflow", "/fe-spec", "/fe-plan", "/fe-handoff", "/fe-resume"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("sdd-workflow skill missing renamed reference %q:\n%s", want, skill)
+		}
+	}
+	for _, oldRef := range []string{"/spec ", "/plan:", "/resume ", "/handoff "} {
+		if strings.Contains(skill, oldRef) {
+			t.Errorf("sdd-workflow skill still references the default name %q:\n%s", oldRef, skill)
+		}
+	}
+
+	sddDoc, err := os.ReadFile(filepath.Join(s.Root, "instructions", "sdd.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(sddDoc), "/fe-spec") || !strings.Contains(string(sddDoc), "/fe-plan") {
+		t.Errorf("sdd.md missing renamed command references:\n%s", sddDoc)
+	}
+
+	resumeDoc, err := os.ReadFile(filepath.Join(s.Root, "commands", "fe-resume.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(resumeDoc), "/fe-handoff") {
+		t.Errorf("resume command should reference the renamed handoff command:\n%s", resumeDoc)
+	}
+
+	handoffSkill, ok := s.Artifact("context-handoff")
+	if !ok {
+		t.Fatal("context-handoff artifact missing")
+	}
+	handoffSkillContent, err := s.Content(handoffSkill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillDoc := string(handoffSkillContent.Files["SKILL.md"])
+	if !strings.Contains(skillDoc, "/fe-handoff") || !strings.Contains(skillDoc, "/fe-resume") {
+		t.Errorf("context-handoff skill missing renamed references:\n%s", skillDoc)
+	}
+}
+
+func TestGenerate_DefaultNamesUnchangedWhenNotRenamed(t *testing.T) {
+	a, _ := LoadPreset("go-cli")
+	s := testStore(t)
+	g, err := Generate(s, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, art := range g.Created {
+		got[art.ID] = true
+	}
+	for _, id := range []string{"spec", "plan", "sdd-workflow", "handoff", "resume"} {
+		if !got[id] {
+			t.Errorf("default artifact ID %q missing when no custom name given", id)
+		}
+	}
+}
+
+func TestGenerate_ChangeScopeReachesTheWorkflowSkill(t *testing.T) {
+	s := testStore(t)
+	if _, err := Generate(s, Answers{"sdd.changeScope": "minimal"}); err != nil {
+		t.Fatal(err)
+	}
+	skill, err := os.ReadFile(filepath.Join(s.Root, "skills", "sdd-workflow", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(skill), "fewest files") {
+		t.Errorf("sdd-workflow skill missing minimal-diff guidance:\n%s", skill)
+	}
+
+	s2 := testStore(t)
+	if _, err := Generate(s2, Answers{"sdd.changeScope": "thorough"}); err != nil {
+		t.Fatal(err)
+	}
+	skill2, err := os.ReadFile(filepath.Join(s2.Root, "skills", "sdd-workflow", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(skill2), "clearly improve") {
+		t.Errorf("sdd-workflow skill missing thorough-mode guidance:\n%s", skill2)
+	}
+	if strings.Contains(string(skill2), "fewest files") {
+		t.Errorf("thorough mode should not carry minimal-diff wording:\n%s", skill2)
+	}
+}
+
 func TestGenerate_CommandsRenderAsValidSingleFileArtifacts(t *testing.T) {
 	a, _ := LoadPreset("web-app")
 	s := testStore(t)

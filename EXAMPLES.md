@@ -36,7 +36,42 @@ The `go-cli` preset generates 14 artifacts from one command:
 
 Add `--ai` and your logged-in agent (claude, codex, or agy) deepens `testing`/`conventions`/`toolchain` for your exact stack — previewed and confirmed before anything is replaced.
 
-## 3. Sync — the gated ritual
+## 3. Profiles, custom names, and change-scope
+
+Save this run as a reusable profile instead of answering the same questions for every repo:
+
+```bash
+loadout wizard --preset go-cli --save-profile acme-backend --yes
+# Saved profile "acme-backend" — reuse it with 'loadout wizard --profile acme-backend'.
+
+loadout profile list
+# acme-backend
+
+loadout wizard --profile acme-backend --yes   # a new repo, same conventions
+```
+
+Profiles are plain YAML at `store/profiles/acme-backend.yaml` — commit the store and the whole team starts from the same answers.
+
+Rename the generated commands and skills to fit your team's naming, and every generated cross-reference follows along automatically:
+
+```yaml
+# answers.yaml
+sdd.workflowSkillName: fe-sdd-workflow
+sdd.specCommandName: fe-spec
+sdd.planCommandName: fe-plan
+sdd.changeScope: minimal
+```
+
+```bash
+loadout wizard --answers answers.yaml --yes
+loadout sync --yes
+```
+
+The synced skill is `~/.claude/skills/fe-sdd-workflow/SKILL.md`, not `sdd-workflow` — and its body says "run /fe-spec", "run /fe-plan", never the old names. Because `sdd.changeScope: minimal` was set, it also carries a "Change scope" section:
+
+> Scope every change to the fewest files the plan step needs. Check whether something similar already exists before writing new code — reuse it instead of duplicating logic. Prefer several small, independently-reviewable PRs over one large one. If a step seems to need touching files outside its stated scope, stop and ask before proceeding.
+
+## 4. Sync — the gated ritual
 
 ```text
 $ loadout status
@@ -61,7 +96,7 @@ The same gate holds in the TUI (`loadout tui` — confirm modal) and the web UI 
   <img src="docs/assets/armory-demo.gif" alt="loadout serve: store browser, drift matrix with an inline diff, the review-and-apply ritual, and the builder wizard" width="820">
 </p>
 
-## 4. Proof: a real agent session using the installed kit
+## 5. Proof: a real agent session using the installed kit
 
 We synced the SDD + continuity artifacts into `~/.claude`, spawned a real Claude Code session (on Haiku) in an empty project, and drove it:
 
@@ -117,7 +152,7 @@ Here it is end to end: `/spec` drafts the spec, `/plan` writes the checklist to 
   <img src="docs/assets/sdd-demo.gif" alt="/spec then /plan write files to disk, the Claude Code session is killed, and a fresh session's /resume reads the same plan file and continues" width="820">
 </p>
 
-## 5. Team distribution
+## 6. Team distribution
 
 ```bash
 # Share skills from a repo (pinned; private repos use your own git credentials):
@@ -131,7 +166,7 @@ loadout bundle export --archive          # → team-kit.loadout.tar.gz
 loadout bundle import team-kit.loadout.tar.gz   # on the new machine: plan → confirm → sync
 ```
 
-## 6. AI drafting with the agents you already pay for
+## 7. AI drafting with the agents you already pay for
 
 ```text
 $ loadout new skill pr-readiness --ai "Verify a PR is ready for review: tests green, \
@@ -153,7 +188,7 @@ Write this skill to the store? [y/N]:
 
 That output came from a real logged-in `agy` session — no API key involved. Output is validated against the Agent Skills contract before you're even asked.
 
-## 7. Everyday loop
+## 8. Everyday loop
 
 ```bash
 loadout            # where am I? anything pending?

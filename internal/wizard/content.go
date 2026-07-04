@@ -3,12 +3,26 @@ package wizard
 import (
 	"fmt"
 	"strings"
+
+	"github.com/AxeForging/loadout/internal/store"
 )
 
 // Content builders: answers → markdown. Kept as plain Go so every branch is
 // unit-testable and the output stays deterministic.
 
 const conventionalTypes = "feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert"
+
+// customName resolves a naming question to the team's chosen command/skill
+// name, falling back to def for an absent answer, an explicit empty string
+// (e.g. from a hand-edited answers file), or a value that wouldn't make a
+// valid artifact ID (store.ValidateName) — never lets a bad name reach a
+// generated file path or slash command.
+func customName(a Answers, id, def string) string {
+	if v := strings.TrimSpace(a.Str(id)); v != "" && store.ValidateName(v) == nil {
+		return v
+	}
+	return def
+}
 
 func labelOf(questionID, value string) string {
 	for _, q := range Questions() {
@@ -244,11 +258,11 @@ func dockerSkill(a Answers) string {
 	return b.String()
 }
 
-func sddInstruction(a Answers) string {
+func sddInstruction(a Answers, specID, planID string) string {
 	folder := a.Str("sdd.folder")
 	var b strings.Builder
 	b.WriteString("# Spec-driven development\n\n")
-	fmt.Fprintf(&b, "Non-trivial features start with a spec in `%s/` before any code. Use `/spec` to draft one and `/plan` to derive the implementation plan.\n\n", folder)
+	fmt.Fprintf(&b, "Non-trivial features start with a spec in `%s/` before any code. Use `/%s` to draft one and `/%s` to derive the implementation plan.\n\n", folder, specID, planID)
 	fmt.Fprintf(&b, "- Specs are numbered: `%s/NNN-short-name.md`.\n", folder)
 	b.WriteString("- A spec must be reviewed (or explicitly waived) before implementation.\n")
 	b.WriteString("- The plan references the spec; the PR references both.\n")
@@ -314,18 +328,32 @@ Ask clarifying questions first if the problem statement is ambiguous.
 `, folder)
 }
 
-func sddWorkflowSkill(a Answers) string {
+// changeScopeGuidance describes how aggressively implementation should
+// change the codebase, per the wizard's sdd.changeScope answer.
+func changeScopeGuidance(mode string) string {
+	switch mode {
+	case "minimal":
+		return "Scope every change to the fewest files the plan step needs. Check whether something similar already exists before writing new code — reuse it instead of duplicating logic. Prefer several small, independently-reviewable PRs over one large one. If a step seems to need touching files outside its stated scope, stop and ask before proceeding."
+	case "thorough":
+		return "Broader changes are fine when they clearly improve the result — refactor adjacent code, consolidate duplication you notice along the way, don't artificially narrow scope. Still keep the plan file current and the PR reviewable; \"thorough\" means well-judged, not unbounded."
+	default: // "balanced"
+		return "Scope changes to what the spec and plan call for. Touch adjacent code only when it's clearly necessary, not speculative. Keep the PR reviewable, but don't fragment one coherent change into many tiny ones either."
+	}
+}
+
+func sddWorkflowSkill(a Answers, workflowID, specID, planID, handoffID, resumeID string) string {
 	folder := a.Str("sdd.folder")
+	scope := changeScopeGuidance(a.Str("sdd.changeScope"))
 	return fmt.Sprintf(`---
-name: sdd-workflow
-description: The team's spec-driven development flow — when specs are required, where specs and their persistent plans live, and how /spec, /plan, /handoff and /resume chain together. Use when starting any non-trivial feature or resuming one.
+name: %[2]s
+description: The team's spec-driven development flow — when specs are required, where specs and their persistent plans live, and how /%[3]s, /%[4]s, /%[5]s and /%[6]s chain together. Use when starting any non-trivial feature or resuming one.
 ---
 
 # Spec-driven development workflow
 
-1. **Spec first** — for any feature beyond a small fix, run /spec to draft %[1]s/NNN-<name>.md.
+1. **Spec first** — for any feature beyond a small fix, run /%[3]s to draft %[1]s/NNN-<name>.md.
 2. **Review** — the spec is reviewed (or waived explicitly in the PR description).
-3. **Plan on disk** — run /plan: it writes %[1]s/NNN-<name>.plan.md, an ordered
+3. **Plan on disk** — run /%[4]s: it writes %[1]s/NNN-<name>.plan.md, an ordered
    "- [ ]" checklist. The plan file — not the conversation — is the source of
    truth for progress.
 4. **Implement with the checklist** — check off steps as they complete and
@@ -333,19 +361,23 @@ description: The team's spec-driven development flow — when specs are required
    in the same PR.
 5. **PR** — reference the spec and plan files in the PR body.
 
+## Change scope
+
+%[7]s
+
 ## Crash / restart / agent-switch safety
 
 Because progress lives in the plan file, work is resumable by design:
-- After a restart or crash, or in a different agent: run /resume — it reads
+- After a restart or crash, or in a different agent: run /%[6]s — it reads
   the context handoff (if any) AND the active plan file, then continues at the
   first unchecked step.
-- Before ending a session mid-feature, run /handoff and make sure the handoff
+- Before ending a session mid-feature, run /%[5]s and make sure the handoff
   references the active spec and plan paths.
 - Never keep plan state only in your head or the chat — if a step completed,
   its checkbox must be checked in the file before moving on.
 
-Never start implementation of a large feature without a spec — if asked to, suggest drafting one with /spec first.
-`, folder)
+Never start implementation of a large feature without a spec — if asked to, suggest drafting one with /%[3]s first.
+`, folder, workflowID, specID, planID, handoffID, resumeID, scope)
 }
 
 func testingInstruction(a Answers) string {
@@ -428,21 +460,21 @@ Keep it dense and factual — this is for another AI agent, not a status report 
 `
 }
 
-func resumeCommand() string {
-	return `---
-description: Resume work from the last context handoff written by /handoff (from any agent or a previous session).
+func resumeCommand(handoffID string) string {
+	return fmt.Sprintf(`---
+description: Resume work from the last context handoff written by /%s (from any agent or a previous session).
 ---
 
-1. Read ` + "`.agents/context/handoff.md`" + `. If it does not exist, say so and ask what to work on instead.
-2. If the handoff references a spec/plan (or ` + "`docs/specs/*.plan.md`" + ` files exist), read the active plan file — its unchecked "- [ ]" items are the authoritative remaining work.
-3. Cross-check against reality: run ` + "`git status`" + ` and ` + "`git log --oneline -5`" + `, and spot-check any file the handoff claims was changed.
+1. Read `+"`.agents/context/handoff.md`"+`. If it does not exist, say so and ask what to work on instead.
+2. If the handoff references a spec/plan (or `+"`docs/specs/*.plan.md`"+` files exist), read the active plan file — its unchecked "- [ ]" items are the authoritative remaining work.
+3. Cross-check against reality: run `+"`git status`"+` and `+"`git log --oneline -5`"+`, and spot-check any file the handoff claims was changed.
 4. Summarize in a few lines: the goal, where things stand, and the first next step. Flag any drift between the handoff/plan and the actual repo state.
 5. Continue with the first unchecked plan step (or the handoff's first next step). Respect recorded decisions — do not relitigate them without new information. Keep checking off plan items as you complete them.
-`
+`, handoffID)
 }
 
-func contextHandoffSkill() string {
-	return `---
+func contextHandoffSkill(handoffID, resumeID string) string {
+	return fmt.Sprintf(`---
 name: context-handoff
 description: The team's cross-agent context handoff convention — when and how to dump session state so another agent, another tool, or a later session can continue seamlessly. Use when ending a session, switching agents, or before context gets compacted.
 ---
@@ -451,12 +483,12 @@ description: The team's cross-agent context handoff convention — when and how 
 
 Session context dies with the session — unless it is written down in a place every agent reads. This team's convention:
 
-- **Location**: ` + "`.agents/context/handoff.md`" + ` in the project root (agent-agnostic — Claude Code, Codex, Gemini CLI, Antigravity and Cursor can all read and write it).
-- **Write** a handoff (via /handoff or manually, same format) whenever: the session is ending mid-task, the user says they will continue later or in another tool, or the conversation is about to be compacted and important context is only in the chat.
-- **Read** it (via /resume) at the start of a session when it exists and is recent; verify it against git state before trusting it.
+- **Location**: `+"`.agents/context/handoff.md`"+` in the project root (agent-agnostic — Claude Code, Codex, Gemini CLI, Antigravity and Cursor can all read and write it).
+- **Write** a handoff (via /%s or manually, same format) whenever: the session is ending mid-task, the user says they will continue later or in another tool, or the conversation is about to be compacted and important context is only in the chat.
+- **Read** it (via /%s) at the start of a session when it exists and is recent; verify it against git state before trusting it.
 - **Format**: Goal · Current state · Decisions & constraints · Next steps · Gotchas. Dense, factual, written for an AI agent.
 - **Lifecycle**: one live handoff per project; it is safe to commit. Delete or rewrite it when the task completes — a stale handoff is worse than none.
-`
+`, handoffID, resumeID)
 }
 
 func contains(list []string, v string) bool {
