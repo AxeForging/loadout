@@ -4,7 +4,9 @@ Your agentic gear kit. loadout keeps AI-agent configs — skills, instructions, 
 
 Skills use the open [Agent Skills](https://agentskills.io) standard (`SKILL.md`), so the canonical format is the native format: loadout places them, tracks them, and keeps them in sync everywhere.
 
-**Current release: v0.4.0** — canonical store, sync engine with drift detection, all five agent adapters, external git sources, and shareable bundles. In progress: builder wizard, TUI, web UI ([ROADMAP.md](ROADMAP.md)).
+**Current release: v1.0.0** — canonical store, sync engine with drift detection, all five agent adapters, external git sources, shareable bundles, builder wizard with crash-safe SDD, AI drafting via your logged-in agents, TUI and embedded web UI ([ROADMAP.md](ROADMAP.md) — v1 complete).
+
+**New here? Read [EXAMPLES.md](EXAMPLES.md)** — a hands-on walkthrough ending with a real Claude session using loadout-installed `/spec` and `/handoff`.
 
 ## Why
 

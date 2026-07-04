@@ -13,8 +13,11 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 | M5 | Builder wizard (conventions + SDD presets) | ✅ shipped — released as v0.5.0 |
 | M6 | TUI dashboard | ✅ shipped — released as v0.6.0 |
 | M6.5 | Continuity (context handoff) + testing strategy + AI drafting via logged-in agents + no-args overview | ✅ shipped |
-| M7 | Embedded web UI (React SPA) | ✅ shipped — **released as v0.7.0** |
-| M8 | v1.0 hardening | ⏳ |
+| M7 | Embedded web UI (React SPA) | ✅ shipped — released as v0.7.0 |
+| M7.5 | Crash-safe SDD plans + EXAMPLES walkthrough (real-session proof) | ✅ shipped |
+| M8 | v1.0 hardening | ✅ shipped — **released as v1.0.0** |
+
+**The v1 roadmap is complete.** Post-1.0 ideas live under "Open questions / parked" below.
 
 ## M1 — Core + Claude Code adapter ✅ (v0.1.0)
 
@@ -83,9 +86,16 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ Design via the impeccable craft flow (`.impeccable.md`): warm-steel dark armory theme, Chakra Petch / Schibsted Grotesk / Red Hat Mono, docked pending-changes bar instead of modals, square checklist state markers; verified live with Playwright
 - ⏳ Deferred: SSE push (the server is request-driven; refetch-on-action covers it), bundle import upload (CLI covers it), settings page
 
-## M8 — v1.0 hardening ⏳
+## M7.5 — Continuity hardening + docs ✅
 
-- End-to-end matrix across all five fake agent homes; `doctor` completeness; error-message polish; docs/EXAMPLES; v1.0.0
+- ✅ **Crash-safe SDD**: `/plan` writes `docs/specs/NNN-<name>.plan.md` as a checked-off-as-you-go checklist — the plan file, not the conversation, carries progress; `/resume` continues at the first unchecked item; `/handoff` references the active spec/plan pair
+- ✅ **EXAMPLES.md**: hands-on walkthrough with a real dogfood transcript — a live Claude Code session (Haiku) driven via yoink executed the loadout-installed `/spec` and `/handoff`; AI drafting shown with a real logged-in `agy` run
+
+## M8 — v1.0 hardening ✅ (v1.0.0)
+
+- ✅ Full-matrix e2e: the complete wizard kit + a hook synced across all five fake agent homes ends fully in-sync with a clean `doctor`; deleting an installed file by hand is detected and `sync` restores it
+- ✅ `doctor` completeness: new vanished-install check (recorded installs missing from disk) alongside store validation, agent detection, managed-block balance and orphaned-state reporting
+- ✅ Docs: EXAMPLES.md linked from the README; README current-release line kept honest
 
 ## Open questions / parked
 

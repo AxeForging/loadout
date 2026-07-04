@@ -9,6 +9,7 @@ import (
 
 	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/domain"
+	"github.com/AxeForging/loadout/internal/engine"
 	"github.com/AxeForging/loadout/internal/store"
 	"github.com/urfave/cli/v3"
 )
@@ -90,12 +91,26 @@ func doctorCmd() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if len(orphans) == 0 {
-				ok("no orphaned records")
-			}
 			for _, o := range orphans {
 				note("orphaned record: artifact %q on %s (removed from store; files may remain: %s)",
 					o.Artifact, o.Agent, strings.Join(o.Files, ", "))
+			}
+			// Recorded installs whose files vanished from disk (deleted by
+			// hand or by the agent) — sync would recreate them.
+			plan, err := eng.Plan(ctx, engine.Filter{})
+			if err != nil {
+				return err
+			}
+			vanished := 0
+			for _, it := range plan.Items {
+				if it.StateHash != "" && !it.Exists {
+					vanished++
+					note("recorded install missing on disk: %s of %q on %s (run 'loadout sync' to restore)",
+						it.RelPath, it.Artifact.ID, it.Agent)
+				}
+			}
+			if len(orphans) == 0 && vanished == 0 {
+				ok("no orphaned records, all recorded installs present")
 			}
 
 			if problems > 0 {
