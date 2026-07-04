@@ -72,9 +72,9 @@ func (m *Manager) find(name string) (domain.SourceRef, []domain.SourceRef, error
 
 // AddResult summarizes a source registration.
 type AddResult struct {
-	Ref     domain.SourceRef
-	Added   []string
-	Skipped []string // artifact IDs already present in the store
+	Ref     domain.SourceRef `json:"ref"`
+	Added   []string         `json:"added"`
+	Skipped []string         `json:"skipped"` // artifact IDs already present in the store
 }
 
 // Add clones the repository, discovers skills, imports them into the store

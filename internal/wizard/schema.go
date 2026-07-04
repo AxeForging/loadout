@@ -50,6 +50,7 @@ func Sections() []Section {
 					Options: opts("go", "Go", "typescript", "TypeScript", "python", "Python", "other", "Other"),
 					Default: []string{"go", "typescript"},
 				},
+				{ID: "profile.languages.other", Prompt: "Other languages? (comma-separated, e.g. \"Java, Rust\")", Type: TypeText, Default: ""},
 			},
 		},
 		{
@@ -59,9 +60,10 @@ func Sections() []Section {
 				{ID: "toolchain.tools", Prompt: "Tools and versions (free text, e.g. \"Go 1.24, Node 22, pnpm 9\")", Type: TypeText, Default: ""},
 				{
 					ID: "toolchain.packageManagers", Prompt: "Package managers?", Type: TypeMulti,
-					Options: opts("go-modules", "Go modules", "pnpm", "pnpm", "npm", "npm", "uv", "uv", "pip", "pip"),
+					Options: opts("go-modules", "Go modules", "pnpm", "pnpm", "npm", "npm", "uv", "uv", "pip", "pip", "other", "Other"),
 					Default: []string{"go-modules", "pnpm"},
 				},
+				{ID: "toolchain.packageManagers.other", Prompt: "Other package managers? (comma-separated, e.g. \"Maven, Cargo\")", Type: TypeText, Default: ""},
 				{ID: "toolchain.docker", Prompt: "Do you use Docker?", Type: TypeBool, Default: true},
 				{ID: "toolchain.compose", Prompt: "Do you use docker compose for local dev?", Type: TypeBool, Default: true},
 			},
@@ -90,9 +92,10 @@ func Sections() []Section {
 				},
 				{
 					ID: "conv.linters", Prompt: "Which linters/formatters?", Type: TypeMulti,
-					Options: opts("golangci-lint", "golangci-lint (Go)", "gofumpt", "gofumpt (Go)", "eslint", "ESLint (JS/TS)", "prettier", "Prettier", "ruff", "Ruff (Python)"),
+					Options: opts("golangci-lint", "golangci-lint (Go)", "gofumpt", "gofumpt (Go)", "eslint", "ESLint (JS/TS)", "prettier", "Prettier", "ruff", "Ruff (Python)", "other", "Other"),
 					Default: []string{"golangci-lint", "gofumpt", "eslint", "prettier"},
 				},
+				{ID: "conv.linters.other", Prompt: "Other linters/formatters? (comma-separated, e.g. \"Checkstyle, SwiftLint\")", Type: TypeText, Default: ""},
 				{
 					ID: "conv.branching", Prompt: "Branching model?", Type: TypeSelect,
 					Options: opts("trunk", "Trunk-based (short-lived branches off main)", "github-flow", "GitHub flow (feature branches + PRs)", "git-flow", "git-flow (develop/release branches)"),
@@ -139,9 +142,10 @@ func Sections() []Section {
 				},
 				{
 					ID: "quality.unitTools", Prompt: "Unit test runners?", Type: TypeMulti,
-					Options: opts("go-testing", "Go stdlib testing", "vitest", "Vitest", "jest", "Jest", "pytest", "pytest"),
+					Options: opts("go-testing", "Go stdlib testing", "vitest", "Vitest", "jest", "Jest", "pytest", "pytest", "other", "Other"),
 					Default: []string{"go-testing", "vitest"},
 				},
+				{ID: "quality.unitTools.other", Prompt: "Other test runners? (comma-separated, e.g. \"JUnit, XCTest\")", Type: TypeText, Default: ""},
 				{
 					ID: "quality.e2eTool", Prompt: "End-to-end tool?", Type: TypeSelect,
 					Options: opts("playwright", "Playwright", "cypress", "Cypress", "none", "None"),

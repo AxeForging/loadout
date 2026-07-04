@@ -55,7 +55,11 @@ Apply 15 change(s)? [y/N]:
 
 Nothing is ever written without that question (or an explicit `--yes`). Instructions land inside sentinel-marked blocks — everything you wrote yourself in `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` is preserved byte-for-byte. `loadout diff` shows exact changes beforehand; `loadout doctor` verifies the whole setup.
 
-The same gate holds in the TUI (`loadout tui` — confirm modal) and the web UI (`loadout serve` — a docked review bar; applying requires a token minted by the plan you just reviewed).
+The same gate holds in the TUI (`loadout tui` — confirm modal) and the web UI (`loadout serve` — a docked review bar; applying requires a token minted by the plan you just reviewed):
+
+<p align="center">
+  <img src="docs/assets/armory-demo.gif" alt="loadout serve: store browser, drift matrix with an inline diff, the review-and-apply ritual, and the builder wizard" width="820">
+</p>
 
 ## 4. Proof: a real agent session using the installed kit
 
@@ -106,6 +110,12 @@ Any agent — Codex, Gemini CLI, or a fresh Claude session after a restart — c
 ### Crash-safe plans
 
 `/plan` writes `docs/specs/NNN-<name>.plan.md` as a `- [ ]` checklist and keeps it checked-off as steps complete. The plan file, not the conversation, is the source of truth — after a crash or agent switch, `/resume` continues at the first unchecked item.
+
+Here it is end to end: `/spec` drafts the spec, `/plan` writes the checklist to disk, the session is killed outright, and a brand-new session's `/resume` reads the same file on disk and keeps going:
+
+<p align="center">
+  <img src="docs/assets/sdd-demo.gif" alt="/spec then /plan write files to disk, the Claude Code session is killed, and a fresh session's /resume reads the same plan file and continues" width="820">
+</p>
 
 ## 5. Team distribution
 

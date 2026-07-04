@@ -12,6 +12,10 @@ Skills use the open [Agent Skills](https://agentskills.io) standard (`SKILL.md`)
 
 **New here? Read [EXAMPLES.md](EXAMPLES.md)** — a hands-on walkthrough ending with a real Claude session using loadout-installed `/spec` and `/handoff`.
 
+<p align="center">
+  <img src="docs/assets/armory-demo.gif" alt="loadout web UI — browse the store, spot drift, review and apply a sync, generate a kit with the builder" width="820">
+</p>
+
 ## Why
 
 Agent configs are fragmented across `~/.claude`, `~/.codex`, `~/.gemini`, `~/.cursor` and project `.agents/` directories: no sync, no versioning, no team-sharing, no reinstall story. loadout treats them like dotfiles with a package manager on top:
@@ -137,6 +141,12 @@ updates:
 
 Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
 
+**Crash-safe by design** — `/plan` writes a checkbox-tracked plan file to disk next to the spec; a killed session (crash, restart, laptop closed) loses nothing, because `/resume` reads that file — not the conversation — and continues at the first unchecked step:
+
+<p align="center">
+  <img src="docs/assets/sdd-demo.gif" alt="A live Claude Code session: /spec drafts a spec, /plan writes a persistent checklist to disk, the session is killed, and a brand-new session's /resume reads the same file and keeps going" width="820">
+</p>
+
 ## Context handoff — continue anywhere
 
 Session context dies with the session. The wizard's continuity artifacts standardize the fix across every agent:
@@ -160,7 +170,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources, one-click bundle export, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 

@@ -170,6 +170,55 @@ func TestLoadPreset_AllEmbeddedPresetsAreValid(t *testing.T) {
 	}
 }
 
+func TestGenerate_OtherFreeTextFlowsIntoGeneratedContent(t *testing.T) {
+	a := Answers{
+		"profile.languages":               []string{"go", "other"},
+		"profile.languages.other":         "Java",
+		"toolchain.packageManagers":       []string{"go-modules", "other"},
+		"toolchain.packageManagers.other": "Maven",
+		"conv.linters":                    []string{"golangci-lint", "other"},
+		"conv.linters.other":              "Checkstyle",
+		"quality.unitTools":               []string{"go-testing", "other"},
+		"quality.unitTools.other":         "JUnit",
+	}
+	s := testStore(t)
+	if _, err := Generate(s, a); err != nil {
+		t.Fatal(err)
+	}
+
+	core, err := os.ReadFile(filepath.Join(s.Root, "instructions", "core.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(core), "Java") || strings.Contains(string(core), "Other") {
+		t.Errorf("core.md should list Java, not the generic Other placeholder:\n%s", core)
+	}
+
+	toolchain, err := os.ReadFile(filepath.Join(s.Root, "instructions", "toolchain.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(toolchain), "Maven") {
+		t.Errorf("toolchain.md missing custom package manager Maven:\n%s", toolchain)
+	}
+
+	linting, err := os.ReadFile(filepath.Join(s.Root, "skills", "linting", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(linting), "Checkstyle") {
+		t.Errorf("linting skill missing custom linter Checkstyle:\n%s", linting)
+	}
+
+	testingDoc, err := os.ReadFile(filepath.Join(s.Root, "instructions", "testing.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(testingDoc), "JUnit") {
+		t.Errorf("testing.md missing custom test runner JUnit:\n%s", testingDoc)
+	}
+}
+
 func TestGenerate_CommandsRenderAsValidSingleFileArtifacts(t *testing.T) {
 	a, _ := LoadPreset("web-app")
 	s := testStore(t)

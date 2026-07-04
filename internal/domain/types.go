@@ -39,12 +39,12 @@ const APIVersion = "loadout/v1"
 
 // Artifact is one entry in the store manifest.
 type Artifact struct {
-	ID      string       `yaml:"id"`
-	Kind    ArtifactKind `yaml:"kind"`
-	Path    string       `yaml:"path"`
-	Targets []string     `yaml:"targets,omitempty"`
-	Origin  string       `yaml:"origin,omitempty"`
-	Tags    []string     `yaml:"tags,omitempty"`
+	ID      string       `yaml:"id"                   json:"id"`
+	Kind    ArtifactKind `yaml:"kind"                 json:"kind"`
+	Path    string       `yaml:"path"                 json:"path"`
+	Targets []string     `yaml:"targets,omitempty"     json:"targets,omitempty"`
+	Origin  string       `yaml:"origin,omitempty"      json:"origin,omitempty"`
+	Tags    []string     `yaml:"tags,omitempty"        json:"tags,omitempty"`
 }
 
 // Defaults holds manifest-wide fallbacks.
@@ -106,14 +106,14 @@ const (
 // list lives in the store (sources.lock.yaml) so a shared store reproduces
 // the same sources everywhere.
 type SourceRef struct {
-	Name string `yaml:"name"`
-	URL  string `yaml:"url"`
+	Name string `yaml:"name"                json:"name"`
+	URL  string `yaml:"url"                 json:"url"`
 	// Ref is a branch or tag; empty means the remote default branch.
-	Ref string `yaml:"ref,omitempty"`
+	Ref string `yaml:"ref,omitempty"        json:"ref,omitempty"`
 	// Commit is the pinned revision artifacts were imported from.
-	Commit string `yaml:"commit"`
+	Commit string `yaml:"commit"               json:"commit"`
 	// Subdir limits discovery to a subdirectory of the repository.
-	Subdir string `yaml:"subdir,omitempty"`
+	Subdir string `yaml:"subdir,omitempty"     json:"subdir,omitempty"`
 }
 
 // OriginSource formats the artifact origin for a named source.

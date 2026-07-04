@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/sync/plan", s.handleSyncPlan)
 	s.mux.HandleFunc("POST /api/sync/apply", s.handleSyncApply)
 	s.mux.HandleFunc("GET /api/sources", s.handleSources)
+	s.mux.HandleFunc("POST /api/sources/add", s.handleSourcesAdd)
 	s.mux.HandleFunc("POST /api/sources/check", s.handleSourcesCheck)
 	s.mux.HandleFunc("GET /api/wizard/schema", s.handleWizardSchema)
 	s.mux.HandleFunc("GET /api/wizard/presets", s.handleWizardPresets)
@@ -332,6 +334,46 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 		refs = []domain.SourceRef{}
 	}
 	writeJSON(w, http.StatusOK, refs)
+}
+
+func (s *Server) handleSourcesAdd(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Sources == nil {
+		writeErr(w, http.StatusServiceUnavailable, fmt.Errorf("no store configured"))
+		return
+	}
+	var req struct {
+		Name   string `json:"name"`
+		URL    string `json:"url"`
+		Ref    string `json:"ref"`
+		Subdir string `json:"subdir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	if req.URL == "" {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("url is required"))
+		return
+	}
+	name := req.Name
+	if name == "" {
+		name = strings.TrimSuffix(filepath.Base(req.URL), ".git")
+	}
+	// Cloning a dead or slow remote must not hang the request forever.
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	result, err := s.opts.Sources.Add(ctx, name, req.URL, req.Ref, req.Subdir)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if result.Added == nil {
+		result.Added = []string{}
+	}
+	if result.Skipped == nil {
+		result.Skipped = []string{}
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleSourcesCheck(w http.ResponseWriter, r *http.Request) {

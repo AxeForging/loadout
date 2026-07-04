@@ -60,6 +60,28 @@ func (a Answers) List(id string) []string {
 	return nil
 }
 
+// EffectiveList returns a multi answer's checked options plus any custom
+// values from its "<id>.other" free-text companion (comma-separated). When
+// free-text values are given, the generic "other" placeholder option is
+// dropped in favor of the specific values it stands in for.
+func (a Answers) EffectiveList(id string) []string {
+	var extras []string
+	for _, extra := range strings.Split(a.Str(id+".other"), ",") {
+		extra = strings.TrimSpace(extra)
+		if extra != "" {
+			extras = append(extras, extra)
+		}
+	}
+	out := make([]string, 0, len(a.List(id))+len(extras))
+	for _, v := range a.List(id) {
+		if v == "other" && len(extras) > 0 {
+			continue
+		}
+		out = append(out, v)
+	}
+	return append(out, extras...)
+}
+
 // Has reports whether a multi answer contains value.
 func (a Answers) Has(id, value string) bool {
 	for _, v := range a.List(id) {
