@@ -1,1 +1,0 @@
-{"root":["./src/api.ts","./src/main.tsx","./src/components/Layout.tsx","./src/components/StateBadge.tsx","./src/components/SyncDock.tsx","./src/pages/Agents.tsx","./src/pages/Builder.tsx","./src/pages/Dashboard.tsx","./src/pages/Sources.tsx","./src/pages/Store.tsx","./src/pages/StoreDetail.tsx","./vite.config.ts"],"version":"5.9.3"}

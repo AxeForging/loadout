@@ -42,6 +42,8 @@ file_naming_pattern:
     - "*.svg"
     - "*.woff"
     - "*.woff2"
+    - "*.gif"
+    - "*.png"
     - "README*"
     - "LICENSE*"
     - "Makefile"
