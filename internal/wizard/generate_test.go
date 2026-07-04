@@ -317,6 +317,35 @@ func TestGenerate_DefaultNamesUnchangedWhenNotRenamed(t *testing.T) {
 	}
 }
 
+func TestGenerate_ChangeScopeReachesTheWorkflowSkill(t *testing.T) {
+	s := testStore(t)
+	if _, err := Generate(s, Answers{"sdd.changeScope": "minimal"}); err != nil {
+		t.Fatal(err)
+	}
+	skill, err := os.ReadFile(filepath.Join(s.Root, "skills", "sdd-workflow", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(skill), "fewest files") {
+		t.Errorf("sdd-workflow skill missing minimal-diff guidance:\n%s", skill)
+	}
+
+	s2 := testStore(t)
+	if _, err := Generate(s2, Answers{"sdd.changeScope": "thorough"}); err != nil {
+		t.Fatal(err)
+	}
+	skill2, err := os.ReadFile(filepath.Join(s2.Root, "skills", "sdd-workflow", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(skill2), "clearly improve") {
+		t.Errorf("sdd-workflow skill missing thorough-mode guidance:\n%s", skill2)
+	}
+	if strings.Contains(string(skill2), "fewest files") {
+		t.Errorf("thorough mode should not carry minimal-diff wording:\n%s", skill2)
+	}
+}
+
 func TestGenerate_CommandsRenderAsValidSingleFileArtifacts(t *testing.T) {
 	a, _ := LoadPreset("web-app")
 	s := testStore(t)

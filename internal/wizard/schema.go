@@ -127,6 +127,15 @@ func Sections() []Section {
 				{ID: "sdd.specCommandName", Prompt: "Name for the spec-drafting command (default: spec)", Type: TypeText, Default: "spec"},
 				{ID: "sdd.planCommandName", Prompt: "Name for the plan command (default: plan)", Type: TypeText, Default: "plan"},
 				{ID: "sdd.workflowSkillName", Prompt: "Name for the SDD workflow skill (default: sdd-workflow, e.g. \"fe-sdd-workflow\")", Type: TypeText, Default: "sdd-workflow"},
+				{
+					ID: "sdd.changeScope", Prompt: "How aggressively should implementation change the codebase?", Type: TypeSelect,
+					Options: opts(
+						"minimal", "Minimal diff — fewest files, reuse what exists, no duplication, small reviewable PRs (token-conscious)",
+						"balanced", "Balanced — reasonable scope, refactor adjacent code when it clearly helps",
+						"thorough", "Thorough — broader changes and larger token budgets are fine if they improve the result",
+					),
+					Default: "balanced",
+				},
 			},
 		},
 		{

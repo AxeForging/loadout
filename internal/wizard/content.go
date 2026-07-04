@@ -328,8 +328,22 @@ Ask clarifying questions first if the problem statement is ambiguous.
 `, folder)
 }
 
+// changeScopeGuidance describes how aggressively implementation should
+// change the codebase, per the wizard's sdd.changeScope answer.
+func changeScopeGuidance(mode string) string {
+	switch mode {
+	case "minimal":
+		return "Scope every change to the fewest files the plan step needs. Check whether something similar already exists before writing new code — reuse it instead of duplicating logic. Prefer several small, independently-reviewable PRs over one large one. If a step seems to need touching files outside its stated scope, stop and ask before proceeding."
+	case "thorough":
+		return "Broader changes are fine when they clearly improve the result — refactor adjacent code, consolidate duplication you notice along the way, don't artificially narrow scope. Still keep the plan file current and the PR reviewable; \"thorough\" means well-judged, not unbounded."
+	default: // "balanced"
+		return "Scope changes to what the spec and plan call for. Touch adjacent code only when it's clearly necessary, not speculative. Keep the PR reviewable, but don't fragment one coherent change into many tiny ones either."
+	}
+}
+
 func sddWorkflowSkill(a Answers, workflowID, specID, planID, handoffID, resumeID string) string {
 	folder := a.Str("sdd.folder")
+	scope := changeScopeGuidance(a.Str("sdd.changeScope"))
 	return fmt.Sprintf(`---
 name: %[2]s
 description: The team's spec-driven development flow — when specs are required, where specs and their persistent plans live, and how /%[3]s, /%[4]s, /%[5]s and /%[6]s chain together. Use when starting any non-trivial feature or resuming one.
@@ -347,6 +361,10 @@ description: The team's spec-driven development flow — when specs are required
    in the same PR.
 5. **PR** — reference the spec and plan files in the PR body.
 
+## Change scope
+
+%[7]s
+
 ## Crash / restart / agent-switch safety
 
 Because progress lives in the plan file, work is resumable by design:
@@ -359,7 +377,7 @@ Because progress lives in the plan file, work is resumable by design:
   its checkbox must be checked in the file before moving on.
 
 Never start implementation of a large feature without a spec — if asked to, suggest drafting one with /%[3]s first.
-`, folder, workflowID, specID, planID, handoffID, resumeID)
+`, folder, workflowID, specID, planID, handoffID, resumeID, scope)
 }
 
 func testingInstruction(a Answers) string {
