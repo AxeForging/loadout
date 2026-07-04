@@ -10,8 +10,8 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 | M2 | All five agent adapters + `doctor` + `add` | ✅ shipped |
 | M3 | External git skill sources (pinned, gated updates) | ✅ shipped |
 | M4 | Shareable bundles (export/import) | ✅ shipped — **released as v0.4.0** |
-| M5 | Builder wizard (conventions + SDD presets) | ✅ shipped — **released as v0.5.0** |
-| M6 | TUI dashboard | ⏳ |
+| M5 | Builder wizard (conventions + SDD presets) | ✅ shipped — released as v0.5.0 |
+| M6 | TUI dashboard | ✅ shipped — **released as v0.6.0** |
 | M7 | Embedded web UI (React SPA) | ⏳ |
 | M8 | v1.0 hardening | ⏳ |
 
@@ -62,9 +62,10 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ Engine fix uncovered by M5: multiple managed blocks merging into the same file within one sync now compose instead of clobbering each other (permanent regression test)
 - ⏳ Custom skill builder (freeform task → agentskills.io-valid SKILL.md) — lands with the web `/builder` where the UX fits; `loadout new skill` covers scaffolding meanwhile
 
-## M6 — TUI ⏳ (v0.6.0)
+## M6 — TUI ✅ (v0.6.0)
 
-- Bubble Tea dashboard (`loadout tui`), per-tab sub-models: Overview (agent cards + drift counts) · Store (artifact browser + preview) · Agents (status, diff view, gated sync modal) · Sources (pin vs remote) · Log (engine events)
+- ✅ Bubble Tea dashboard (`loadout tui`, alias `dash`): Overview (agent cards + drift counts + pending changes) · Store (artifact browser + content preview) · Agents (drift rows, `d` diff view, `s` sync behind a confirm modal) · Sources (pins, `c` on-demand remote check) · Log (session activity)
+- ✅ The confirmation gate holds in the TUI: declining the modal dispatches nothing (unit-tested via model messages, no PTY needed)
 
 ## M7 — Web UI ⏳ (v0.7.0)
 

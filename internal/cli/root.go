@@ -25,6 +25,7 @@ func Commands() []*cli.Command {
 		updateCmd(),
 		bundleCmd(),
 		wizardCmd(),
+		tuiCmd(),
 		agentsCmd(),
 		doctorCmd(),
 		versionCmd(),

@@ -43,7 +43,7 @@ func completionCmd() *cli.Command {
 const bashCompletion = `# loadout bash completion
 _loadout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="init status diff sync install new add source check update bundle wizard agents doctor version completion"
+    local commands="init status diff sync install new add source check update bundle wizard tui agents doctor version completion"
     COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
 }
 complete -F _loadout loadout
@@ -65,6 +65,7 @@ _loadout() {
         'update:Fetch and apply source updates (gated)'
         'bundle:Export/import the store as a shareable artifact'
         'wizard:Guided builder for skills and conventions'
+        'tui:Interactive dashboard'
         'agents:List supported agents'
         'doctor:Verify store, agent homes, blocks and state'
         'version:Print version information'
@@ -89,6 +90,7 @@ complete -c loadout -n '__fish_use_subcommand' -a check       -d 'Check sources 
 complete -c loadout -n '__fish_use_subcommand' -a update      -d 'Fetch and apply source updates (gated)'
 complete -c loadout -n '__fish_use_subcommand' -a bundle      -d 'Export/import the store as a shareable artifact'
 complete -c loadout -n '__fish_use_subcommand' -a wizard      -d 'Guided builder for skills and conventions'
+complete -c loadout -n '__fish_use_subcommand' -a tui         -d 'Interactive dashboard'
 complete -c loadout -n '__fish_use_subcommand' -a agents      -d 'List supported agents'
 complete -c loadout -n '__fish_use_subcommand' -a doctor      -d 'Verify store, agent homes, blocks and state'
 complete -c loadout -n '__fish_use_subcommand' -a version     -d 'Print version information'

@@ -50,6 +50,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout bundle export [--archive]` | Export the whole store as a shareable directory or `.loadout.tar.gz` |
 | `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--answers`, `--yes`) |
+| `loadout tui` (alias `dash`) | Interactive dashboard: drift matrix, store browser with preview, sources, diff view, gated sync |
 | `loadout agents` | List supported agents and whether they are installed |
 | `loadout doctor` | Verify the store, agent homes, managed-block markers and install state |
 | `loadout version` | Print build version information |
