@@ -96,6 +96,10 @@ Everything outside the markers is preserved byte-for-byte. Hooks and settings fr
 | Antigravity | planned |
 | Cursor | planned |
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) — all adapters, external skill sources, shareable bundles, a guided builder wizard (including engineering-conventions and spec-driven-development presets), TUI and an embedded web UI.
+
 ## Development
 
 ```bash
