@@ -37,12 +37,19 @@ loadout/
 │   ├── bundle/                 # Shareable bundles: export (dir/tar.gz) + validated, gated import
 │   ├── wizard/                 # Builder questionnaire: schema (single source of truth), answers, generators, embedded presets
 │   ├── tui/                    # Bubble Tea dashboard (model.go state/keys, view.go rendering; sync gated by confirm modal)
-│   ├── runner/                 # Headless logged-in agents (claude -p / codex exec / gemini -p): draft + enrich, validated output
+│   ├── runner/                 # Headless logged-in agents (claude -p / codex exec / agy -p / gemini -p): draft + enrich, validated output
+│   ├── web/                    # Localhost JSON API + embedded SPA (embed all:dist); two-phase sync gate (plan token → apply)
 │   ├── config/                 # loadout's own config + platform paths
 │   ├── build/info.go           # Version info injected at build time
 │   └── logging/logging.go      # Zerolog setup
+├── web/                        # SPA source (React 19 + Vite + Tailwind v4 + TanStack Router/Query; NO Zustand)
 ├── integration/                # Integration tests (build tag: integration, temp HOME)
 └── Makefile
+```
+
+Frontend rule: `internal/web/dist` is COMMITTED (single-binary `go install` ships the real UI). After changing anything under `web/`, run `make build-web` and commit the refreshed dist in the same PR. Design context lives in `.impeccable.md` — follow it for any UI work.
+
+```
 ```
 
 Import direction: `domain` imports nothing local; `store` and `adapter/*` import `domain` only; adapters never import `engine`, `store` or each other; `engine` imports `domain`/`store`/`adapter`; `source` imports `domain`/`store`; `cli` orchestrates everything; nothing imports `cli`.

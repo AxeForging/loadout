@@ -13,7 +13,7 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 | M5 | Builder wizard (conventions + SDD presets) | ✅ shipped — released as v0.5.0 |
 | M6 | TUI dashboard | ✅ shipped — released as v0.6.0 |
 | M6.5 | Continuity (context handoff) + testing strategy + AI drafting via logged-in agents + no-args overview | ✅ shipped |
-| M7 | Embedded web UI (React SPA) | 🚧 in progress |
+| M7 | Embedded web UI (React SPA) | ✅ shipped — **released as v0.7.0** |
 | M8 | v1.0 hardening | ⏳ |
 
 ## M1 — Core + Claude Code adapter ✅ (v0.1.0)
@@ -75,11 +75,13 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ **Headless runner layer** (`internal/runner`): drives already-logged-in agents (`claude -p --output-format json`, `codex exec` read-only sandbox, `gemini -p`) — no API keys, rides the user's plan. `loadout new skill --ai "desc"` drafts validated SKILL.md; `loadout wizard --ai` deepens testing/conventions/toolchain for the exact stack. Templates stay the deterministic base; AI output is validated + confirmation-gated; `loadout agents` shows a HEADLESS column
 - ✅ Bare `loadout` shows a friendly overview (store, agents, pending changes, contextual next steps) instead of a help wall
 
-## M7 — Web UI 🚧 (v0.7.0)
+## M7 — Web UI ✅ (v0.7.0)
 
-- Embedded React SPA (React 19 + Vite + Tailwind v4 + TanStack Router/Query + Zustand) built into the binary via `embed.FS` — single-binary distribution preserved
-- `loadout serve [--dev]` — REST + SSE; **two-phase sync** (plan → token → apply) as the permission gate over HTTP
-- Routes: dashboard · store browser with markdown preview · per-agent status + diff + gated sync · sources · bundles (export download / import upload) · `/builder` (the wizard as a multi-step form) · settings
+- ✅ Embedded React SPA (React 19 + Vite + Tailwind v4 + TanStack Router/Query) built into the binary via `embed.FS`; **dist/ is committed** so `go install` ships the real UI. Zustand dropped — TanStack Query + local state covers everything
+- ✅ `loadout serve [--dev]` on localhost — REST JSON API; **two-phase sync** (POST plan → single-use token → POST apply) is the permission gate over HTTP; wizard schema served as JSON so the Builder reuses the exact CLI questionnaire
+- ✅ Routes: overview (drift counts, agents, bundle export) · store browser + file viewer · drift matrix with inline colored diffs · sources with read-only remote check · Builder (multi-step form, preset chips, review-before-write)
+- ✅ Design via the impeccable craft flow (`.impeccable.md`): warm-steel dark armory theme, Chakra Petch / Schibsted Grotesk / Red Hat Mono, docked pending-changes bar instead of modals, square checklist state markers; verified live with Playwright
+- ⏳ Deferred: SSE push (the server is request-driven; refetch-on-action covers it), bundle import upload (CLI covers it), settings page
 
 ## M8 — v1.0 hardening ⏳
 

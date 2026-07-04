@@ -21,8 +21,15 @@ func agentsCmd() *cli.Command {
 			for _, r := range runner.Registry() {
 				headless[r.ID()] = r.Available()
 			}
-			// Adapter IDs map onto runner binaries where a headless mode exists.
-			runnerFor := map[string]string{"claude-code": "claude", "codex": "codex", "gemini-cli": "gemini"}
+			// Adapter IDs map onto runner binaries where a headless mode
+			// exists; the gemini ecosystem now ships as agy with the old
+			// gemini binary as fallback.
+			runnerFor := map[string][]string{
+				"claude-code": {"claude"},
+				"codex":       {"codex"},
+				"gemini-cli":  {"agy", "gemini"},
+				"antigravity": {"agy"},
+			}
 			for _, ad := range newRegistry().All() {
 				det, err := ad.Detect(ctx)
 				if err != nil {
@@ -34,11 +41,13 @@ func agentsCmd() *cli.Command {
 					installed = "yes"
 				}
 				hl := "-"
-				if bin, ok := runnerFor[string(ad.ID())]; ok {
-					if headless[bin] {
-						hl = "yes"
-					} else {
-						hl = "no"
+				if bins, ok := runnerFor[string(ad.ID())]; ok {
+					hl = "no"
+					for _, bin := range bins {
+						if headless[bin] {
+							hl = "yes"
+							break
+						}
 					}
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", ad.ID(), ad.DisplayName(), installed, hl, det.Home)

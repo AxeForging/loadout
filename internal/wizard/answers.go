@@ -127,8 +127,10 @@ func (a Answers) Merge(other Answers) Answers {
 	return out
 }
 
-// validate rejects unknown question IDs and select values outside the
-// schema's options, so typos in answer files fail loudly.
+// Validate rejects unknown question IDs and values outside the schema's
+// options, so typos in answer files and API payloads fail loudly.
+func (a Answers) Validate() (Answers, error) { return a.validate() }
+
 func (a Answers) validate() (Answers, error) {
 	byID := map[string]Question{}
 	for _, q := range Questions() {

@@ -79,6 +79,29 @@ func ExportArchive(s *store.Store, destFile, createdBy string) (Meta, error) {
 	return meta, nil
 }
 
+// TempArchive is an archive exported to a temp location (e.g. for an HTTP
+// download); call Cleanup when done.
+type TempArchive struct {
+	Path string
+	dir  string
+}
+
+func (t TempArchive) Cleanup() { _ = os.RemoveAll(t.dir) }
+
+// ExportArchiveTemp exports the store archive into a fresh temp dir.
+func ExportArchiveTemp(s *store.Store, createdBy string) (TempArchive, error) {
+	dir, err := os.MkdirTemp("", "loadout-export-*")
+	if err != nil {
+		return TempArchive{}, err
+	}
+	path := filepath.Join(dir, "bundle.loadout.tar.gz")
+	if _, err := ExportArchive(s, path, createdBy); err != nil {
+		_ = os.RemoveAll(dir)
+		return TempArchive{}, err
+	}
+	return TempArchive{Path: path, dir: dir}, nil
+}
+
 // copyStoreTree copies the store excluding its .git directory.
 func copyStoreTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {

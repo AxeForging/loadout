@@ -22,7 +22,7 @@ LDFLAGS := -s -w \
 
 GOOS_ARCH := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: all build build-all run test test-integration lint fmt format tidy clean ci version tag
+.PHONY: all build build-all build-web run test test-integration lint fmt format tidy clean ci version tag
 
 all: build
 
@@ -41,6 +41,12 @@ build-all:
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$bin_path ./cmd/$(APP); \
 	done
 	@echo "Done. Binaries in $(DIST)/"
+
+# Rebuild the SPA into internal/web/dist. The dist output is COMMITTED so
+# plain `go build` / `go install` ship the real UI — run this (and commit)
+# whenever web/ changes.
+build-web:
+	cd web && pnpm install && pnpm build
 
 run: build
 	@$(BIN) $(ARGS)

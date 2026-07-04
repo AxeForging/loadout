@@ -26,7 +26,7 @@ type Runner interface {
 
 // Registry returns the built-in runners in preference order.
 func Registry() []Runner {
-	return []Runner{claudeRunner{}, codexRunner{}, geminiRunner{}}
+	return []Runner{claudeRunner{}, codexRunner{}, agyRunner{}, geminiRunner{}}
 }
 
 // Get resolves a runner by ID.
@@ -36,7 +36,7 @@ func Get(id string) (Runner, error) {
 			return r, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown runner %q (available: claude, codex, gemini)", id)
+	return nil, fmt.Errorf("unknown runner %q (available: claude, codex, agy, gemini)", id)
 }
 
 // First returns the first available runner, or an error naming what to
@@ -47,7 +47,7 @@ func First() (Runner, error) {
 			return r, nil
 		}
 	}
-	return nil, fmt.Errorf("no headless agent found on PATH — install and log into one of: claude, codex, gemini")
+	return nil, fmt.Errorf("no headless agent found on PATH — install and log into one of: claude, codex, agy, gemini")
 }
 
 func run(ctx context.Context, name string, args ...string) (string, error) {
@@ -111,7 +111,20 @@ func (codexRunner) Run(ctx context.Context, prompt string) (string, error) {
 	)
 }
 
-// geminiRunner shells out to Gemini CLI's non-interactive prompt mode.
+// agyRunner shells out to the Antigravity/Gemini CLI (`agy`), which replaced
+// the standalone gemini binary in that ecosystem. --print runs one prompt
+// non-interactively.
+type agyRunner struct{}
+
+func (agyRunner) ID() string      { return "agy" }
+func (agyRunner) Available() bool { return onPath("agy") }
+
+func (agyRunner) Run(ctx context.Context, prompt string) (string, error) {
+	return run(ctx, "agy", "--print", prompt)
+}
+
+// geminiRunner shells out to the legacy Gemini CLI's non-interactive prompt
+// mode (kept for machines that still have the old binary).
 type geminiRunner struct{}
 
 func (geminiRunner) ID() string      { return "gemini" }
