@@ -124,6 +124,9 @@ func Sections() []Section {
 					Options: opts("light", "Light — problem, approach, checklist", "full", "Full — context, requirements, design, test plan, rollout"),
 					Default: "light",
 				},
+				{ID: "sdd.specCommandName", Prompt: "Name for the spec-drafting command (default: spec)", Type: TypeText, Default: "spec"},
+				{ID: "sdd.planCommandName", Prompt: "Name for the plan command (default: plan)", Type: TypeText, Default: "plan"},
+				{ID: "sdd.workflowSkillName", Prompt: "Name for the SDD workflow skill (default: sdd-workflow, e.g. \"fe-sdd-workflow\")", Type: TypeText, Default: "sdd-workflow"},
 			},
 		},
 		{
@@ -167,6 +170,8 @@ func Sections() []Section {
 					Prompt: "Enable cross-agent context handoff (/handoff dumps session state to .agents/context/, /resume picks it up — works across agents and restarts)?",
 					Type:   TypeBool, Default: true,
 				},
+				{ID: "continuity.handoffCommandName", Prompt: "Name for the handoff command (default: handoff)", Type: TypeText, Default: "handoff"},
+				{ID: "continuity.resumeCommandName", Prompt: "Name for the resume command (default: resume)", Type: TypeText, Default: "resume"},
 			},
 		},
 		{
