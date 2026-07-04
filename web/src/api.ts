@@ -45,6 +45,7 @@ export type Diff = { agent: string; artifact: string; relPath: string; diff: str
 
 export type Source = { name: string; url: string; ref?: string; commit: string; subdir?: string };
 export type SourceCheck = { name: string; pinned: string; remote: string; hasUpdate: boolean; error?: string };
+export type SourceAddResult = { ref: Source; added: string[]; skipped: string[] };
 
 export type WizardOption = { value: string; label: string };
 export type WizardQuestion = {
@@ -93,6 +94,8 @@ export const api = {
       body: JSON.stringify({ token }),
     }),
   sources: () => request<Source[]>("/api/sources"),
+  sourcesAdd: (input: { name?: string; url: string; ref?: string; subdir?: string }) =>
+    request<SourceAddResult>("/api/sources/add", { method: "POST", body: JSON.stringify(input) }),
   sourcesCheck: () => request<SourceCheck[]>("/api/sources/check", { method: "POST", body: "{}" }),
   wizardSchema: () => request<WizardSection[]>("/api/wizard/schema"),
   wizardPresets: () => request<string[]>("/api/wizard/presets"),

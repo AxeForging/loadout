@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/AxeForging/loadout/internal/adapter/claudecode"
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/engine"
+	"github.com/AxeForging/loadout/internal/source"
 	"github.com/AxeForging/loadout/internal/store"
 )
 
@@ -35,6 +37,100 @@ func newTestServer(t *testing.T) (*Server, string) {
 	reg.Register(claudecode.NewWithHome(home))
 	eng := &engine.Engine{Store: s, Registry: reg, StatePath: filepath.Join(dir, "state.yaml")}
 	return New(Options{Engine: eng}), home
+}
+
+func newTestServerWithSources(t *testing.T) *Server {
+	t.Helper()
+	dir := t.TempDir()
+	s, err := store.Init(filepath.Join(dir, "store"), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := &engine.Engine{Store: s, Registry: adapter.NewRegistry(), StatePath: filepath.Join(dir, "state.yaml")}
+	mgr := &source.Manager{Store: s, CacheDir: filepath.Join(dir, "sources-cache")}
+	return New(Options{Engine: eng, Sources: mgr})
+}
+
+// gitIn runs git in dir for building a fake upstream skills repo.
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// makeUpstream builds a local git repo (cloneable by path) with one skill,
+// standing in for an external skills repository.
+func makeUpstream(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "team-skills")
+	skill := filepath.Join(dir, "code-review")
+	if err := os.MkdirAll(skill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: code-review\ndescription: review code\n---\n\nreview the diff\n"
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "init", "-b", "main")
+	gitIn(t, dir, "config", "user.email", "t@example.com")
+	gitIn(t, dir, "config", "user.name", "t")
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-m", "initial")
+	return dir
+}
+
+func TestAPI_SourcesAdd(t *testing.T) {
+	// No Sources configured — the endpoint fails loudly instead of a silent no-op.
+	srv, _ := newTestServer(t)
+	rec, _ := doJSON(t, srv.Handler(), "POST", "/api/sources/add", map[string]string{"url": "https://example.com/x.git"})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("no sources configured = %d, want 503", rec.Code)
+	}
+
+	withSources := newTestServerWithSources(t)
+	h := withSources.Handler()
+
+	// Missing url is rejected before any clone is attempted.
+	rec, _ = doJSON(t, h, "POST", "/api/sources/add", map[string]string{})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing url = %d, want 400", rec.Code)
+	}
+
+	// Happy path: a real local repo is cloned, its skill imported, and pinned.
+	upstream := makeUpstream(t)
+	rec, out := doJSON(t, h, "POST", "/api/sources/add", map[string]string{"name": "team-skills", "url": upstream})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sources/add = %d: %s", rec.Code, rec.Body)
+	}
+	ref := out["ref"].(map[string]any)
+	if ref["name"] != "team-skills" {
+		t.Errorf("ref = %v, want name team-skills", ref)
+	}
+	added := out["added"].([]any)
+	if len(added) != 1 || added[0] != "code-review" {
+		t.Errorf("added = %v, want [code-review]", added)
+	}
+	// Skipped must be `[]`, never JSON null, or a naive frontend `.length`
+	// access on an empty result blows up.
+	skipped, ok := out["skipped"].([]any)
+	if !ok || len(skipped) != 0 {
+		t.Errorf("skipped = %#v, want empty array (not null)", out["skipped"])
+	}
+
+	req := httptest.NewRequest("GET", "/api/sources", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("sources list decode: %v: %s", err, rec.Body)
+	}
+	if len(list) != 1 || list[0]["name"] != "team-skills" {
+		t.Errorf("sources list = %v, want one entry named team-skills", list)
+	}
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path string, body any) (*httptest.ResponseRecorder, map[string]any) {

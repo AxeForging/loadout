@@ -170,7 +170,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources, one-click bundle export, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 
