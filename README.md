@@ -45,6 +45,8 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
 | `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
+| `loadout bundle export [--archive]` | Export the whole store as a shareable directory or `.loadout.tar.gz` |
+| `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
 | `loadout agents` | List supported agents and whether they are installed |
 | `loadout doctor` | Verify the store, agent homes, managed-block markers and install state |
 | `loadout version` | Print build version information |
@@ -111,6 +113,17 @@ updates:
   checkOnRun: true     # after status/sync, print at most one hint line
   intervalHours: 24    # cache window; failures are always silent
 ```
+
+## Bundles — share your whole setup
+
+```bash
+loadout bundle export --archive          # → team-kit.loadout.tar.gz
+# send it to a teammate / new machine
+loadout bundle import team-kit.loadout.tar.gz   # shows the merge plan, asks
+loadout sync                                    # installs into their agents
+```
+
+A bundle is the store tree plus `bundle.yaml` metadata — a plain directory by default (commit it to a repo) or a single archive with `--archive`. Import never merges silently: new artifacts and unregistered sources are listed, ID conflicts are skipped unless you pass `--on-conflict overwrite`, and nothing happens without confirmation.
 
 ## Supported agents
 

@@ -31,11 +31,13 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ Design change vs. the original plan: git operations shell out to the **system git** instead of go-git — private repos authenticate through the user's existing SSH agent / credential helpers, so the keyring secrets package became unnecessary
 - ⏳ `skillsStrategy: shared-agents-dir` — install skills once into `~/.agents/skills/` for agents that read it (Cursor, Gemini CLI) — moved to M4
 
-## M4 — Bundles ⏳ (v0.4.0)
+## M4 — Bundles ✅ (v0.4.0)
 
-- `loadout bundle export [--archive]` — one shareable artifact of the whole setup (git-friendly dir by default, `.loadout.tar.gz` optional)
-- `bundle.yaml`: manifest snapshot + sources lock + min loadout version + metadata
-- `loadout bundle import <path|url>` — validate schema, show summary, permission-gated merge with conflict policy (skip/overwrite/rename)
+- ✅ `loadout bundle export [--archive]` — one shareable artifact of the whole setup (git-friendly dir by default, `.loadout.tar.gz` optional)
+- ✅ `bundle.yaml` metadata + the store tree (manifest, artifacts, sources.lock) — sources not registered locally are merged on import
+- ✅ `loadout bundle import <path>` — schema validation, merge plan summary, permission-gated apply with conflict policy (`skip` default, `overwrite` opt-in); archive extraction rejects path traversal
+- ⏳ import from URL and a `rename` conflict policy — deferred
+- ⏳ `skillsStrategy: shared-agents-dir` (carried from M3) — install skills once into `~/.agents/skills/` for Cursor + Gemini CLI
 
 ## M5 — Builder wizard ⏳ (v0.5.0)
 

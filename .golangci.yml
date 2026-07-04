@@ -11,6 +11,10 @@ linters:
     errcheck:
       exclude-functions:
         - (io.Closer).Close
+        - (*os.File).Close
+        - (*compress/gzip.Reader).Close
+        - (*compress/gzip.Writer).Close
+        - os.RemoveAll
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
