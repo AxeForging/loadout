@@ -11,9 +11,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -39,8 +41,9 @@ type Server struct {
 	opts Options
 	mux  *http.ServeMux
 
-	mu    sync.Mutex
-	plans map[string]pendingPlan
+	mu          sync.Mutex
+	plans       map[string]pendingPlan
+	bundlePlans map[string]pendingBundlePlan
 }
 
 type pendingPlan struct {
@@ -48,11 +51,22 @@ type pendingPlan struct {
 	created time.Time
 }
 
+type pendingBundlePlan struct {
+	plan     *bundle.ImportPlan
+	tempFile string
+	created  time.Time
+}
+
+func (p pendingBundlePlan) discard() {
+	p.plan.Close()
+	_ = os.Remove(p.tempFile)
+}
+
 func New(opts Options) *Server {
 	if opts.Addr == "" {
 		opts.Addr = "127.0.0.1:4600"
 	}
-	s := &Server{opts: opts, mux: http.NewServeMux(), plans: map[string]pendingPlan{}}
+	s := &Server{opts: opts, mux: http.NewServeMux(), plans: map[string]pendingPlan{}, bundlePlans: map[string]pendingBundlePlan{}}
 	s.routes()
 	return s
 }
@@ -77,6 +91,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
+	s.mux.HandleFunc("POST /api/bundle/import/plan", s.handleBundleImportPlan)
+	s.mux.HandleFunc("POST /api/bundle/import/apply", s.handleBundleImportApply)
 	s.mux.Handle("/", spaHandler())
 }
 
@@ -552,6 +568,108 @@ func (s *Server) handleBundleExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+file+`"`)
 	w.Header().Set("Content-Type", "application/gzip")
 	http.ServeFile(w, r, tmp.Path)
+}
+
+// maxBundleUploadSize caps a bundle upload at 50MB, rejected before it is
+// buffered in full.
+const maxBundleUploadSize = 50 << 20
+
+func (s *Server) handleBundleImportPlan(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBundleUploadSize)
+	if err := r.ParseMultipartForm(maxBundleUploadSize); err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, fmt.Errorf("upload too large or malformed (max %dMB): %w", maxBundleUploadSize>>20, err))
+		return
+	}
+	file, _, err := r.FormFile("bundle")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing bundle file: %w", err))
+		return
+	}
+	defer file.Close()
+
+	tmp, err := os.CreateTemp("", "loadout-upload-*.tar.gz")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	tempFile := tmp.Name()
+	if _, err := io.Copy(tmp, file); err != nil {
+		tmp.Close()
+		_ = os.Remove(tempFile)
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	tmp.Close()
+
+	plan, err := bundle.PlanImport(s.opts.Engine.Store, tempFile)
+	if err != nil {
+		_ = os.Remove(tempFile)
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+
+	token := newToken()
+	s.mu.Lock()
+	for t, p := range s.bundlePlans { // drop stale plans
+		if time.Since(p.created) > 10*time.Minute {
+			p.discard()
+			delete(s.bundlePlans, t)
+		}
+	}
+	s.bundlePlans[token] = pendingBundlePlan{plan: plan, tempFile: tempFile, created: time.Now()}
+	s.mu.Unlock()
+
+	if plan.New == nil {
+		plan.New = []domain.Artifact{}
+	}
+	if plan.Conflicts == nil {
+		plan.Conflicts = []domain.Artifact{}
+	}
+	if plan.Identical == nil {
+		plan.Identical = []string{}
+	}
+	if plan.Sources == nil {
+		plan.Sources = []domain.SourceRef{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":     token,
+		"meta":      plan.Meta,
+		"new":       plan.New,
+		"conflicts": plan.Conflicts,
+		"identical": plan.Identical,
+		"sources":   plan.Sources,
+	})
+}
+
+func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token     string `json:"token"`
+		Overwrite bool   `json:"overwrite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/bundle/import/plan first"))
+		return
+	}
+	s.mu.Lock()
+	pending, ok := s.bundlePlans[req.Token]
+	delete(s.bundlePlans, req.Token)
+	s.mu.Unlock()
+	if !ok {
+		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — re-upload and review again"))
+		return
+	}
+	defer pending.discard()
+
+	sourcesAdded := len(pending.plan.Sources)
+	applied, err := bundle.Apply(s.opts.Engine.Store, pending.plan, req.Overwrite)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if applied == nil {
+		applied = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"applied": applied, "sourcesAdded": sourcesAdded})
 }
 
 // spaHandler serves the embedded SPA with an index.html fallback for client

@@ -27,11 +27,11 @@ const MetaFile = "bundle.yaml"
 
 // Meta describes a bundle.
 type Meta struct {
-	APIVersion string    `yaml:"apiVersion"`
-	Name       string    `yaml:"name"`
-	CreatedAt  time.Time `yaml:"createdAt"`
-	CreatedBy  string    `yaml:"createdBy"`
-	Artifacts  int       `yaml:"artifacts"`
+	APIVersion string    `yaml:"apiVersion" json:"apiVersion"`
+	Name       string    `yaml:"name" json:"name"`
+	CreatedAt  time.Time `yaml:"createdAt" json:"createdAt"`
+	CreatedBy  string    `yaml:"createdBy" json:"createdBy"`
+	Artifacts  int       `yaml:"artifacts" json:"artifacts"`
 }
 
 // Export writes the store as a bundle directory at dest (which must not

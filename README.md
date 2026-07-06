@@ -62,7 +62,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`) |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
 | `loadout tui` (alias `dash`) | Interactive dashboard: drift matrix, store browser with preview, sources, diff view, gated sync |
-| `loadout serve` | Local web UI on `127.0.0.1:4600` — overview, store browser, drift matrix with diffs, sources, the Builder, bundle export |
+| `loadout serve` | Local web UI on `127.0.0.1:4600` — overview, store browser, drift matrix with diffs, sources, the Builder, bundle export/import |
 | `loadout agents` | List supported agents and whether they are installed |
 | `loadout doctor` | Verify the store, agent homes, managed-block markers and install state |
 | `loadout version` | Print build version information |
@@ -189,7 +189,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 
@@ -201,6 +201,8 @@ loadout sync                                    # installs into their agents
 ```
 
 A bundle is the store tree plus `bundle.yaml` metadata — a plain directory by default (commit it to a repo) or a single archive with `--archive`. Import never merges silently: new artifacts and unregistered sources are listed, ID conflicts are skipped unless you pass `--on-conflict overwrite`, and nothing happens without confirmation.
+
+The web UI covers the same import flow for `.loadout.tar.gz` archives: from the dashboard's "share" section, upload the file, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only.
 
 ## Supported agents
 

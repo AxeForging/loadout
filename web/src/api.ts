@@ -58,11 +58,18 @@ export type WizardQuestion = {
 export type WizardSection = { id: string; title: string; questions: WizardQuestion[] };
 export type Answers = Record<string, unknown>;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+export type BundleMeta = { name: string; createdBy: string; createdAt: string; artifacts: number };
+export type BundleImportPlan = {
+  token: string;
+  meta: BundleMeta;
+  new: Artifact[];
+  conflicts: Artifact[];
+  identical: string[];
+  sources: Source[];
+};
+export type BundleImportResult = { applied: string[]; sourcesAdded: number };
+
+async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `${res.status}`;
     try {
@@ -74,6 +81,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message);
   }
   return res.json() as Promise<T>;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  return handleResponse<T>(res);
+}
+
+// Bypasses request()'s fixed JSON header — the browser must set its own
+// multipart boundary in Content-Type for a FormData body.
+async function requestUpload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(path, { method: "POST", body: form });
+  return handleResponse<T>(res);
 }
 
 export const api = {
@@ -118,4 +140,14 @@ export const api = {
     }),
   deleteProfile: (name: string) =>
     request<{ removed: boolean }>(`/api/profiles/${name}`, { method: "DELETE" }),
+  bundleImportPlan: (file: File) => {
+    const form = new FormData();
+    form.set("bundle", file);
+    return requestUpload<BundleImportPlan>("/api/bundle/import/plan", form);
+  },
+  bundleImportApply: (token: string, overwrite: boolean) =>
+    request<BundleImportResult>("/api/bundle/import/apply", {
+      method: "POST",
+      body: JSON.stringify({ token, overwrite }),
+    }),
 };
