@@ -1,0 +1,37 @@
+# Plan — 001 web bundle import
+
+Spec: `docs/specs/001-web-bundle-import.md`
+
+## Steps
+
+- [x] **Backend: pending bundle-plan store.** In `internal/web/server.go`, add `pendingBundlePlan{plan *bundle.ImportPlan, tempFile string, created time.Time}` and `s.bundlePlans map[string]pendingBundlePlan` (init in `New`), guarded by `s.mu` (reuse the existing mutex — same pattern as `s.plans`). Add eviction of entries older than 10 minutes wherever new plans are inserted, calling `pending.plan.Close()` and removing `pending.tempFile` on eviction.
+- [x] **Backend: `handleBundleImportPlan`.** `r.ParseMultipartForm(50 << 20)` (reject over-cap / bad multipart with `400`), read the `bundle` file field, write to `os.CreateTemp("", "loadout-upload-*.tar.gz")`, call `bundle.PlanImport(s.opts.Engine.Store, tempPath)` (on error: remove temp file, `400` with the underlying error message — covers "not gzip", "missing bundle.yaml", "apiVersion mismatch"), mint a token (`newToken()`), stash `pendingBundlePlan`, respond with `{token, meta, new, conflicts, identical, sources}` JSON built from `plan.Meta`/`plan.New`/`plan.Conflicts`/`plan.Identical`/`plan.Sources`.
+- [x] **Backend: `handleBundleImportApply`.** Decode `{token, overwrite}`, `400` if token missing, pop from `s.bundlePlans` (`409` if unknown/expired), call `bundle.Apply(s.opts.Engine.Store, pending.plan, req.Overwrite)`, then `pending.plan.Close()` and remove `pending.tempFile` regardless of apply error, respond `{applied: [...], sourcesAdded: len(plan.Sources) if applied}` (or on error, `500`).
+- [x] **Backend: route registration.** Add `POST /api/bundle/import/plan` → `handleBundleImportPlan` and `POST /api/bundle/import/apply` → `handleBundleImportApply` in `routes()`, next to the existing `GET /api/bundle/export`.
+- [x] **Backend unit tests** in `internal/web/server_test.go`: valid bundle → plan → assert counts/meta match a fixture; invalid file (non-gzip, missing `bundle.yaml`, bad `apiVersion`) → `400`; oversized upload → rejected before full buffering; apply with bogus token → `409`; apply twice with same token → second call `409`; expired plan (reuse whatever clock-injection or eviction-forcing pattern the existing sync-plan eviction test uses) → `409` and temp dir gone; apply with `overwrite=false` vs `true` → assert conflict artifacts skipped vs overwritten, sources merged, response `applied`/`sourcesAdded` correct.
+- [x] **Frontend: `api.ts` additions.** Add types (`BundleImportPlan`, mirroring the JSON shape) and two methods: `bundleImportPlan(file: File)` (builds `FormData`, `fetch("/api/bundle/import/plan", { method: "POST", body: form })` — bypasses the shared `request<T>()` helper's JSON `Content-Type` header, so either add a small variant or inline the fetch+error-handling here) and `bundleImportApply(token: string, overwrite: boolean)` (JSON via `request<T>()`, matching `syncApply`'s style).
+- [x] **Frontend: import UI component.** New file (e.g. `web/src/components/BundleImportDock.tsx` or a section within `Dashboard.tsx`) modeled on `SyncDock.tsx`'s plan → review → apply flow: file input, "Review" button (calls `bundleImportPlan`), plan display (bundle meta, new/conflicts/identical counts + IDs, sources), skip/overwrite toggle (default skip), "Import" confirm button (calls `bundleImportApply`), success/error states, `queryClient.invalidateQueries()` on success, plus the "run a sync" hint. Wire it into `Dashboard.tsx`'s existing "share" section next to the export link.
+- [x] **Frontend component test** (Testing Library, colocated `*.test.tsx`): renders idle state; shows pending state while the plan mutation is in flight; shows an error state when the plan call rejects; renders plan review with correct counts once resolved. Discovered step: the web/ package had zero test infrastructure before this change — added `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom` as devDependencies, a `test` script, a Vitest `test` block in `vite.config.ts`, and `src/test/setup.ts` (jest-dom matchers). Confirmed with the user before adding this infra.
+- [x] **`make build-web`** and commit the refreshed `internal/web/dist` in the same PR (repo convention).
+- [x] **Integration test** — scope decision (confirmed with user): skipped a separate `integration/` subprocess test. No existing `integration/` test spawns `loadout serve` and hits it over HTTP (all drive CLI subcommands via `exec.Command`); that would be new test infrastructure. `internal/web/bundle_import_test.go` already covers the full real stack end-to-end with zero mocks — real store on disk, real `bundle.PlanImport`/`bundle.Apply`, real HTTP handler via `httptest` — including the conflict skip/overwrite round trip and temp-file/eviction cleanup. Revisit if a `loadout serve` subprocess-testing pattern is added for other reasons later.
+- [x] **README update**: document the web-import flow in the existing bundle export/import section.
+
+## Risks
+
+- No persisted-state or migration risk: pending plans and temp upload files are in-memory/ephemeral, gone on process restart.
+- Multipart parsing must enforce the 50MB cap *before* significant buffering (use `r.ParseMultipartForm` with a hard max, and/or `http.MaxBytesReader` wrapping `r.Body`) — a naive implementation could still read an oversized body into memory before rejecting it.
+- Cleanup correctness: every code path that ends a pending bundle plan's life (apply success, apply error, eviction, and — if added — an explicit discard) must call both `plan.Close()` (extraction temp dir) and remove the upload temp file, or temp files leak on a long-running `loadout serve` process. Cover this with tests rather than inspection alone.
+- Rollback is a plain revert — no data format or lockfile changes ship with this feature.
+
+## Done means
+
+- All unit tests in `internal/web/bundle_import_test.go` for the two new handlers pass, including the negative cases (bad file, oversized file, bad/expired/reused token) — this file *is* the end-to-end coverage (see scope decision above), no separate integration/ scenario.
+- Frontend component test (`BundleImport.test.tsx`) passes; manual verification via a running `loadout serve` + curl round-trip (plan → apply against a real store) confirms the HTTP contract end-to-end.
+- `go test -race ./...` and `go test -tags integration ./integration/...` both pass; `pnpm build` and `pnpm test` (web/) both pass.
+- `golangci-lint` could not be verified in this environment (the installed binary fails on `--version` itself, a pre-existing environment issue unrelated to this change) — `go vet` and `gofumpt -l` are clean on all touched Go files.
+- `internal/web/dist` is rebuilt and committed.
+- README reflects the new web import capability.
+
+## Post-implementation notes
+
+- Manual verification via a running `loadout serve` + real `curl` multipart upload/plan/apply round trip caught a real bug that unit tests missed: `bundle.Meta` (`internal/bundle/bundle.go`) had only `yaml` tags, so `json.Marshal` produced Go field names (`APIVersion`, `Name`, `CreatedAt`, ...) instead of the camelCase the frontend's `BundleMeta` type expects. Fixed by adding `json` tags alongside the existing `yaml` tags (no behavior change to bundle.yaml serialization). Added a regression assertion in `internal/web/bundle_import_test.go` checking `out["meta"].(map[string]any)["name"]`/`["createdBy"]` explicitly, since decoding into `map[string]any` without checking exact keys let the casing bug slip through originally.

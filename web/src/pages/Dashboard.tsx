@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { api } from "../api";
+import { BundleImport } from "../components/BundleImport";
 import { PageHeader } from "../components/Layout";
 import { StateBadge, stateOf, KindGlyph } from "../components/StateBadge";
 import { Num } from "../components/motion";
@@ -156,6 +157,8 @@ export function Dashboard() {
           </span>
           {data.store.name}.loadout.tar.gz
         </a>
+
+        <BundleImport />
       </section>
     </div>
   );
