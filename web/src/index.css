@@ -14,10 +14,11 @@
   --font-mono: "Red Hat Mono", ui-monospace, monospace;
 
   /* Warm-steel darks, tinted toward the forge hue (~60). */
-  --color-bg: oklch(0.16 0.008 60);
-  --color-surface: oklch(0.19 0.01 60);
-  --color-raised: oklch(0.23 0.012 60);
-  --color-line: oklch(0.29 0.014 60);
+  --color-bg: oklch(0.155 0.009 60);
+  --color-bg-deep: oklch(0.125 0.008 60);
+  --color-surface: oklch(0.19 0.011 60);
+  --color-raised: oklch(0.225 0.012 60);
+  --color-line: oklch(0.285 0.014 60);
   --color-line-strong: oklch(0.38 0.016 60);
 
   --color-ink: oklch(0.93 0.008 75);
@@ -28,13 +29,24 @@
   --color-ember: oklch(0.74 0.14 55);
   --color-ember-bright: oklch(0.8 0.15 60);
   --color-ember-dim: oklch(0.4 0.07 55);
-  --color-ember-faint: oklch(0.25 0.03 55);
+  --color-ember-faint: oklch(0.24 0.03 55);
 
   /* Sync states. */
   --color-sync: oklch(0.74 0.1 150);
+  --color-sync-dim: oklch(0.34 0.045 150);
   --color-warn: oklch(0.79 0.11 85);
+  --color-warn-dim: oklch(0.35 0.05 85);
   --color-drift: oklch(0.74 0.08 235);
+  --color-drift-dim: oklch(0.33 0.04 235);
   --color-danger: oklch(0.68 0.15 25);
+  --color-danger-dim: oklch(0.32 0.06 25);
+}
+
+:root {
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --grid-line: oklch(0.32 0.014 60 / 0.1);
 }
 
 html {
@@ -42,6 +54,21 @@ html {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 15px;
+  color-scheme: dark;
+}
+
+/* Blueprint drafting grid + forge glow bleeding in from the top-left. */
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(70rem 40rem at -8% -12%, oklch(0.24 0.035 55 / 0.55), transparent 62%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size:
+    auto,
+    46px 46px,
+    46px 46px;
+  background-attachment: fixed;
 }
 
 ::selection {
@@ -49,10 +76,33 @@ html {
   color: var(--color-ink);
 }
 
+:focus-visible {
+  outline: 1px solid var(--color-ember);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* ---------------------------------------------------------------- motion */
+
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -60,12 +110,307 @@ html {
   }
 }
 
+@keyframes wipe {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 -2% 0 0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ember-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes dock-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Staggered entrances: set style={{ "--i": n }} on the element. */
 .rise {
-  animation: rise 0.35s cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation: rise 0.45s var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.wipe {
+  animation: wipe 0.55s var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.page {
+  animation: page-in 0.45s var(--ease-out-expo) both;
+}
+
+.grow-x {
+  transform-origin: left center;
+  animation: grow-x 0.7s var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.stamp {
+  animation: stamp 0.3s var(--ease-out-quart) both;
+}
+
+.ember-pulse {
+  animation: ember-pulse 2.2s var(--ease-in-out) infinite;
+}
+
+.dock-up {
+  animation: dock-up 0.4s var(--ease-out-expo) both;
+}
+
+/* Height expansion without animating height: grid-template-rows 0fr → 1fr. */
+.expander {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s var(--ease-out-quart);
+}
+.expander[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.expander > * {
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------- fixtures */
+
+/* Drafting-table corner brackets: two opposing corners on hover/active. */
+.brk {
+  position: relative;
+}
+.brk::before,
+.brk::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--color-ember);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.15s linear,
+    transform 0.25s var(--ease-out-quart);
+}
+.brk::before {
+  top: 0;
+  left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  transform: translate(4px, 4px);
+}
+.brk::after {
+  bottom: 0;
+  right: 0;
+  border-left: 0;
+  border-top: 0;
+  transform: translate(-4px, -4px);
+}
+.brk:hover::before,
+.brk:hover::after,
+.brk[data-active="true"]::before,
+.brk[data-active="true"]::after {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+/* Stencilled overline label — crate lettering. */
+.crate {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crate::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  background: var(--color-ember-dim);
+  flex: none;
+}
+
+/* ---------------------------------------------------------------- controls */
+
+.btn-ember {
+  border-radius: 2px;
+  background: var(--color-ember);
+  color: var(--color-bg-deep);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.42rem 1.1rem;
+  transition:
+    background 0.15s linear,
+    transform 0.1s var(--ease-out-quart);
+}
+.btn-ember:hover {
+  background: var(--color-ember-bright);
+}
+.btn-ember:active {
+  transform: scale(0.97);
+}
+.btn-ember:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.btn-outline {
+  border-radius: 2px;
+  border: 1px solid var(--color-ember-dim);
+  color: var(--color-ember);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.42rem 1.1rem;
+  transition:
+    border-color 0.15s linear,
+    color 0.15s linear,
+    transform 0.1s var(--ease-out-quart);
+}
+.btn-outline:hover {
+  border-color: var(--color-ember);
+  color: var(--color-ember-bright);
+}
+.btn-outline:active {
+  transform: scale(0.97);
+}
+.btn-outline:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.btn-ghost {
+  border-radius: 2px;
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-ink-dim);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  padding: 0.42rem 0.9rem;
+  transition:
+    border-color 0.15s linear,
+    color 0.15s linear,
+    transform 0.1s var(--ease-out-quart);
+}
+.btn-ghost:hover {
+  border-color: var(--color-ember-dim);
+  color: var(--color-ink);
+}
+.btn-ghost:active {
+  transform: scale(0.97);
+}
+.btn-ghost:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.chip {
+  border-radius: 2px;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink-dim);
+  font-size: 0.85rem;
+  padding: 0.2rem 0.75rem;
+  transition:
+    border-color 0.15s linear,
+    color 0.15s linear,
+    background 0.15s linear,
+    transform 0.1s var(--ease-out-quart);
+}
+.chip:hover {
+  border-color: var(--color-line-strong);
+  color: var(--color-ink);
+}
+.chip:active {
+  transform: scale(0.96);
+}
+.chip[data-on="true"] {
+  border-color: var(--color-ember-dim);
+  background: var(--color-ember-faint);
+  color: var(--color-ember-bright);
+}
+
+.field {
+  border-radius: 2px;
+  border: 1px solid var(--color-line);
+  background: oklch(0.17 0.01 60);
+  padding: 0.42rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.15s linear;
+}
+.field::placeholder {
+  color: var(--color-ink-faint);
+}
+.field:focus {
+  border-color: var(--color-ember-dim);
+  outline: none;
+}
+
+/* Numerals line up on the readiness board and ledgers. */
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
