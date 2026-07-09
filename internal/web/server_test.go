@@ -494,6 +494,86 @@ func TestAPI_BundleExportSelected_UnknownArtifactRejected(t *testing.T) {
 	}
 }
 
+func TestAPI_BundleExportFlat(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	body, _ := json.Marshal(map[string]any{"artifactIds": []string{"demo"}})
+	req := httptest.NewRequest("POST", "/api/bundle/export/flat", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export flat = %d: %s", rec.Code, rec.Body)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got["yaml"], "apiVersion: loadout-config/v1") {
+		t.Errorf("flat export missing apiVersion:\n%s", got["yaml"])
+	}
+	if !strings.Contains(got["yaml"], "id: demo") {
+		t.Errorf("flat export missing the selected artifact:\n%s", got["yaml"])
+	}
+}
+
+func TestAPI_BundleImportPlan_AcceptsPasteYAML(t *testing.T) {
+	source, _ := newTestServer(t) // seeds "demo"
+	raw, err := bundle.ExportFlat(source.opts.Engine.Store, "test", bundle.Selection{ArtifactIDs: []string{"demo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Import into a different, empty store — newTestServer's own store
+	// already has "demo" seeded, which would make this a no-op "identical"
+	// import instead of exercising the "new" path.
+	srv := newTestServerWithSources(t)
+	h := srv.Handler()
+
+	body, _ := json.Marshal(map[string]string{"yaml": string(raw)})
+	req := httptest.NewRequest("POST", "/api/bundle/import/plan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("import plan (paste YAML) = %d: %s", rec.Code, rec.Body)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	token, _ := out["token"].(string)
+	if token == "" {
+		t.Fatal("expected a plan token")
+	}
+	newArtifacts, _ := out["new"].([]any)
+	if len(newArtifacts) != 1 {
+		t.Fatalf("plan.new = %v, want one artifact", out["new"])
+	}
+
+	applyBody, _ := json.Marshal(map[string]any{"token": token})
+	applyReq := httptest.NewRequest("POST", "/api/bundle/import/apply", bytes.NewReader(applyBody))
+	applyRec := httptest.NewRecorder()
+	h.ServeHTTP(applyRec, applyReq)
+	if applyRec.Code != http.StatusOK {
+		t.Fatalf("import apply (paste YAML plan) = %d: %s", applyRec.Code, applyRec.Body)
+	}
+}
+
+func TestAPI_BundleImportPlan_RejectsEmptyPasteYAML(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	body, _ := json.Marshal(map[string]string{"yaml": "   "})
+	req := httptest.NewRequest("POST", "/api/bundle/import/plan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("import plan with empty yaml = %d, want 400", rec.Code)
+	}
+}
+
 func TestSPA_FallbackServesIndexForClientRoutes(t *testing.T) {
 	srv, _ := newTestServer(t)
 	for _, path := range []string{"/", "/agents", "/store/some-artifact"} {

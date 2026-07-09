@@ -98,6 +98,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
 	s.mux.HandleFunc("POST /api/bundle/export", s.handleBundleExportSelected)
+	s.mux.HandleFunc("POST /api/bundle/export/flat", s.handleBundleExportFlat)
 	s.mux.HandleFunc("POST /api/bundle/import/plan", s.handleBundleImportPlan)
 	s.mux.HandleFunc("POST /api/bundle/import/apply", s.handleBundleImportApply)
 	s.mux.Handle("/", spaHandler())
@@ -672,11 +673,63 @@ func (s *Server) handleBundleExportSelected(w http.ResponseWriter, r *http.Reque
 	http.ServeFile(w, r, tmp.Path)
 }
 
+// handleBundleExportFlat renders a Selection as a single self-contained
+// YAML document and returns it as JSON text (not a file download) — the
+// primary use case is pasting it into a gist or a doc, not always saving a
+// file.
+func (s *Server) handleBundleExportFlat(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ArtifactIDs     []string `json:"artifactIds"`
+		ProfileNames    []string `json:"profileNames"`
+		LibraryEntryIDs []string `json:"libraryEntryIds"`
+		Sources         bool     `json:"sources"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	sel := bundle.Selection{
+		ArtifactIDs: req.ArtifactIDs, ProfileNames: req.ProfileNames,
+		LibraryEntryIDs: req.LibraryEntryIDs, Sources: req.Sources,
+	}
+	raw, err := bundle.ExportFlat(s.opts.Engine.Store, "loadout web", sel)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"yaml": string(raw)})
+}
+
 // maxBundleUploadSize caps a bundle upload at 50MB, rejected before it is
 // buffered in full.
 const maxBundleUploadSize = 50 << 20
 
 func (s *Server) handleBundleImportPlan(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		var req struct {
+			YAML string `json:"yaml"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.YAML) == "" {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf(`invalid request body: expected {"yaml": "..."}`))
+			return
+		}
+		tmp, err := os.CreateTemp("", "loadout-upload-*.yaml")
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		tempFile := tmp.Name()
+		if _, err := tmp.WriteString(req.YAML); err != nil {
+			tmp.Close()
+			_ = os.Remove(tempFile)
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		tmp.Close()
+		s.planBundleImport(w, tempFile)
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxBundleUploadSize)
 	if err := r.ParseMultipartForm(maxBundleUploadSize); err != nil {
 		writeErr(w, http.StatusRequestEntityTooLarge, fmt.Errorf("upload too large or malformed (max %dMB): %w", maxBundleUploadSize>>20, err))
@@ -702,7 +755,14 @@ func (s *Server) handleBundleImportPlan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	tmp.Close()
+	s.planBundleImport(w, tempFile)
+}
 
+// planBundleImport calls PlanImport on an already-materialized bundle file
+// (a multipart upload or a paste-text flat YAML written to a temp file),
+// stashes the plan under a token, and writes the plan JSON. Shared by both
+// intake paths in handleBundleImportPlan.
+func (s *Server) planBundleImport(w http.ResponseWriter, tempFile string) {
 	plan, err := bundle.PlanImport(s.opts.Engine.Store, tempFile)
 	if err != nil {
 		_ = os.Remove(tempFile)
@@ -742,6 +802,12 @@ func (s *Server) handleBundleImportPlan(w http.ResponseWriter, r *http.Request) 
 	if plan.NewLibraryEntries == nil {
 		plan.NewLibraryEntries = []wizard.LibraryEntry{}
 	}
+	if plan.NewGroups == nil {
+		plan.NewGroups = []string{}
+	}
+	if plan.ConflictGroups == nil {
+		plan.ConflictGroups = []string{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":             token,
 		"meta":              plan.Meta,
@@ -752,6 +818,8 @@ func (s *Server) handleBundleImportPlan(w http.ResponseWriter, r *http.Request) 
 		"newProfiles":       plan.NewProfiles,
 		"conflictProfiles":  plan.ConflictProfiles,
 		"newLibraryEntries": plan.NewLibraryEntries,
+		"newGroups":         plan.NewGroups,
+		"conflictGroups":    plan.ConflictGroups,
 	})
 }
 
@@ -780,6 +848,10 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 		profilesAdded += len(pending.plan.ConflictProfiles)
 	}
 	libraryEntriesAdded := len(pending.plan.NewLibraryEntries)
+	groupsAdded := len(pending.plan.NewGroups)
+	if req.Overwrite {
+		groupsAdded += len(pending.plan.ConflictGroups)
+	}
 	applied, err := bundle.Apply(s.opts.Engine.Store, pending.plan, req.Overwrite)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -793,6 +865,7 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 		"sourcesAdded":        sourcesAdded,
 		"profilesAdded":       profilesAdded,
 		"libraryEntriesAdded": libraryEntriesAdded,
+		"groupsAdded":         groupsAdded,
 	})
 }
 

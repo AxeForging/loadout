@@ -17,6 +17,9 @@ export function ExportPage() {
   const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set());
   const [selectedLibrary, setSelectedLibrary] = useState<Set<string>>(new Set());
   const [includeSources, setIncludeSources] = useState(false);
+  const [format, setFormat] = useState<"archive" | "flat">("archive");
+  const [flatYaml, setFlatYaml] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const byKind = useMemo(() => {
     const map = new Map<string, Artifact[]>();
@@ -35,14 +38,17 @@ export function ExportPage() {
     setSet(next);
   }
 
-  const exportMutation = useMutation({
-    mutationFn: () =>
-      api.bundleExportSelected({
-        artifactIds: [...selectedArtifacts],
-        profileNames: [...selectedProfiles],
-        libraryEntryIds: [...selectedLibrary],
-        sources: includeSources,
-      }),
+  function currentSelection() {
+    return {
+      artifactIds: [...selectedArtifacts],
+      profileNames: [...selectedProfiles],
+      libraryEntryIds: [...selectedLibrary],
+      sources: includeSources,
+    };
+  }
+
+  const archiveMutation = useMutation({
+    mutationFn: () => api.bundleExportSelected(currentSelection()),
     onSuccess: (blob) => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -52,6 +58,32 @@ export function ExportPage() {
       URL.revokeObjectURL(url);
     },
   });
+
+  const flatMutation = useMutation({
+    mutationFn: () => api.bundleExportFlat(currentSelection()),
+    onSuccess: (res) => {
+      setFlatYaml(res.yaml);
+      setCopied(false);
+    },
+  });
+
+  const exportMutation = format === "flat" ? flatMutation : archiveMutation;
+
+  async function copyFlatYaml() {
+    if (!flatYaml) return;
+    await navigator.clipboard.writeText(flatYaml);
+    setCopied(true);
+  }
+
+  function downloadFlatYaml() {
+    if (!flatYaml) return;
+    const url = URL.createObjectURL(new Blob([flatYaml], { type: "text/yaml" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "export.loadout.yaml";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   const totalSelected = selectedArtifacts.size + selectedProfiles.size + selectedLibrary.size;
 
@@ -199,6 +231,39 @@ export function ExportPage() {
         </label>
       </section>
 
+      <section className="mt-8 border-t border-line pt-6">
+        <h2 className="crate">format</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setFormat("archive");
+              setFlatYaml(null);
+            }}
+            data-on={format === "archive"}
+            className="chip"
+          >
+            .tar.gz archive
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFormat("flat");
+              setFlatYaml(null);
+            }}
+            data-on={format === "flat"}
+            className="chip"
+          >
+            single YAML file
+          </button>
+        </div>
+        {format === "flat" ? (
+          <p className="mt-2 text-sm leading-relaxed text-ink-dim">
+            One self-contained document — small enough to paste into a gist, a doc, or a chat.
+          </p>
+        ) : null}
+      </section>
+
       <div className="mt-8 flex items-center gap-3">
         <button
           type="button"
@@ -209,8 +274,42 @@ export function ExportPage() {
           {exportMutation.isPending ? "Exporting…" : `Export ${totalSelected} item${totalSelected === 1 ? "" : "s"}`}
         </button>
         {exportMutation.isError ? <span className="text-xs text-danger">{String(exportMutation.error)}</span> : null}
-        {exportMutation.isSuccess ? <span className="stamp text-xs text-sync">■ downloaded</span> : null}
+        {format === "archive" && exportMutation.isSuccess ? (
+          <span className="stamp text-xs text-sync">■ downloaded</span>
+        ) : null}
       </div>
+
+      {format === "flat" && flatYaml ? (
+        <div className="rise mt-4 border border-line-strong bg-raised p-4">
+          <div className="flex items-center justify-between">
+            <p className="font-display text-xs font-semibold uppercase tracking-wider text-ink-dim">
+              export.loadout.yaml
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void copyFlatYaml()}
+                className="text-xs text-ink-faint transition-colors hover:text-ink"
+              >
+                {copied ? "copied ✓" : "copy"}
+              </button>
+              <button
+                type="button"
+                onClick={downloadFlatYaml}
+                className="text-xs text-ink-faint transition-colors hover:text-ink"
+              >
+                download
+              </button>
+            </div>
+          </div>
+          <textarea
+            readOnly
+            value={flatYaml}
+            rows={16}
+            className="mt-3 w-full resize-y overflow-x-auto border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

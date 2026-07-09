@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -156,6 +157,12 @@ type ImportPlan struct {
 	// content-addressed (see wizard.AddToLibrary), so merging them is
 	// always safe — there is no conflict concept for the library.
 	NewLibraryEntries []wizard.LibraryEntry
+	// NewGroups and ConflictGroups are library groups (library/groups.yaml)
+	// diffed by name — same shape as profiles: a name the local store
+	// doesn't have is New, the same name with different member entries is
+	// a Conflict.
+	NewGroups      []string
+	ConflictGroups []string
 
 	bundleRoot string
 	cleanup    func()
@@ -171,9 +178,9 @@ func (p *ImportPlan) Close() {
 // Changes reports how many artifacts Apply would write with the given
 // overwrite policy.
 func (p *ImportPlan) Changes(overwrite bool) int {
-	n := len(p.New) + len(p.Sources) + len(p.NewProfiles) + len(p.NewLibraryEntries)
+	n := len(p.New) + len(p.Sources) + len(p.NewProfiles) + len(p.NewLibraryEntries) + len(p.NewGroups)
 	if overwrite {
-		n += len(p.Conflicts) + len(p.ConflictProfiles)
+		n += len(p.Conflicts) + len(p.ConflictProfiles) + len(p.ConflictGroups)
 	}
 	return n
 }
@@ -293,6 +300,30 @@ func PlanImport(s *store.Store, src string) (*ImportPlan, error) {
 		}
 	}
 
+	localGroups, err := wizard.ListGroups(s)
+	if err != nil {
+		plan.Close()
+		return nil, err
+	}
+	bundleGroups, err := wizard.ListGroups(bundleStore)
+	if err != nil {
+		plan.Close()
+		return nil, err
+	}
+	localGroupByName := make(map[string]wizard.LibraryGroup, len(localGroups))
+	for _, g := range localGroups {
+		localGroupByName[g.Name] = g
+	}
+	for _, g := range bundleGroups {
+		local, exists := localGroupByName[g.Name]
+		switch {
+		case !exists:
+			plan.NewGroups = append(plan.NewGroups, g.Name)
+		case !slices.Equal(local.EntryIDs, g.EntryIDs):
+			plan.ConflictGroups = append(plan.ConflictGroups, g.Name)
+		}
+	}
+
 	sort.Slice(plan.New, func(i, j int) bool { return plan.New[i].ID < plan.New[j].ID })
 	sort.Slice(plan.Conflicts, func(i, j int) bool { return plan.Conflicts[i].ID < plan.Conflicts[j].ID })
 	sort.Strings(plan.NewProfiles)
@@ -407,6 +438,41 @@ func Apply(s *store.Store, p *ImportPlan, overwrite bool) ([]string, error) {
 	for _, entry := range p.NewLibraryEntries {
 		if _, err := wizard.AddToLibrary(s, entry.Text); err != nil {
 			return applied, err
+		}
+	}
+
+	if len(p.NewGroups) > 0 || (overwrite && len(p.ConflictGroups) > 0) {
+		bundleStore, err := store.Open(p.bundleRoot)
+		if err != nil {
+			return applied, err
+		}
+		bundleGroups, err := wizard.ListGroups(bundleStore)
+		if err != nil {
+			return applied, err
+		}
+		byName := make(map[string]wizard.LibraryGroup, len(bundleGroups))
+		for _, g := range bundleGroups {
+			byName[g.Name] = g
+		}
+		applyGroup := func(name string) error {
+			g, ok := byName[name]
+			if !ok {
+				return fmt.Errorf("group %q not found in bundle", name)
+			}
+			_, err := wizard.SaveGroup(s, g.Name, g.EntryIDs)
+			return err
+		}
+		for _, name := range p.NewGroups {
+			if err := applyGroup(name); err != nil {
+				return applied, err
+			}
+		}
+		if overwrite {
+			for _, name := range p.ConflictGroups {
+				if err := applyGroup(name); err != nil {
+					return applied, err
+				}
+			}
 		}
 	}
 

@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BundleImport } from "./BundleImport";
 import { api, type BundleImportPlan } from "../api";
+
+afterEach(cleanup);
 
 vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
@@ -12,6 +14,7 @@ vi.mock("../api", async () => {
     api: {
       ...actual.api,
       bundleImportPlan: vi.fn(),
+      bundleImportPlanYAML: vi.fn(),
       bundleImportApply: vi.fn(),
     },
   };
@@ -81,5 +84,29 @@ describe("BundleImport", () => {
     await waitFor(() => expect(screen.getByText(/team-kit/)).toBeInTheDocument());
     expect(screen.getByText("extra")).toBeInTheDocument();
     expect(screen.getByText("Import 1")).toBeInTheDocument();
+  });
+
+  it("switches to the paste-YAML tab and reviews a pasted document", async () => {
+    vi.mocked(api.bundleImportPlanYAML).mockResolvedValue(samplePlan);
+    renderWithClient();
+
+    await userEvent.click(screen.getByText("paste YAML"));
+    expect(screen.queryByText("Choose bundle…")).not.toBeInTheDocument();
+
+    await userEvent.type(
+      screen.getByPlaceholderText(/Paste a loadout-config\/v1 YAML document/),
+      "apiVersion: loadout-config/v1",
+    );
+    await userEvent.click(screen.getByText("Review"));
+
+    await waitFor(() => expect(screen.getByText(/team-kit/)).toBeInTheDocument());
+    expect(api.bundleImportPlanYAML).toHaveBeenCalledWith("apiVersion: loadout-config/v1");
+  });
+
+  it("the Review button is disabled until something is pasted", async () => {
+    renderWithClient();
+    await userEvent.click(screen.getByText("paste YAML"));
+
+    expect(screen.getByText("Review")).toBeDisabled();
   });
 });

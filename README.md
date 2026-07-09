@@ -57,8 +57,8 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
 | `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
-| `loadout bundle export [--archive]` | Export the store as a shareable directory or `.loadout.tar.gz` — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
-| `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
+| `loadout bundle export [--archive\|--flat]` | Export the store as a shareable directory, `.loadout.tar.gz`, or a single self-contained `.loadout.yaml` document (`--flat`) — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
+| `loadout bundle import <path>` | Validate a bundle (directory, `.tar.gz`, or flat YAML — auto-detected), show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`) |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
 | `loadout loadouts save\|list\|show\|switch\|rm` | Named, switchable sets of active artifacts — `switch` installs the set and removes whatever isn't in it (always asks before writing) |
@@ -230,7 +230,16 @@ loadout bundle export --archive --artifacts demo --profiles acme-backend   # →
 
 `--sources` additionally includes `sources.lock.yaml` in a selective export (it's always included in a full, unfiltered one).
 
-The web UI covers the same import flow for `.loadout.tar.gz` archives: from the dashboard's "share" section, upload the file, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only. For picking exactly what to share instead of exporting everything, the dashboard's share section links to a dedicated **Export** page: chip-select artifacts (grouped by kind, with per-kind and select-all shortcuts), profiles, and library entries or whole groups, then download the resulting `.loadout.tar.gz`.
+For sharing a small selection somewhere text-shaped — a gist, a doc, a chat message — `--flat` writes one self-contained YAML document (`apiVersion: loadout-config/v1`) instead of a directory or archive:
+
+```bash
+loadout bundle export --flat --artifacts demo --profiles acme-backend -o config.yaml
+loadout bundle import config.yaml --yes   # same merge plan/apply path as any other bundle
+```
+
+`bundle import` auto-detects the input shape (directory, `.tar.gz`, or flat YAML) from content, not the file extension, so there's no separate import command to remember.
+
+The web UI covers the same import flow: from the dashboard's "share" section, either upload a `.loadout.tar.gz` file or paste a flat YAML document directly into a textarea, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only. For picking exactly what to share instead of exporting everything, the dashboard's share section links to a dedicated **Export** page: chip-select artifacts (grouped by kind, with per-kind and select-all shortcuts), profiles, and library entries or whole groups, then either download a `.loadout.tar.gz` or render a copyable/downloadable flat YAML document.
 
 ## Supported agents
 
