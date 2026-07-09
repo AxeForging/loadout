@@ -8,6 +8,7 @@ const nav = [
   { to: "/agents", label: "Agents" },
   { to: "/sources", label: "Sources" },
   { to: "/builder", label: "Builder" },
+  { to: "/library", label: "Library" },
 ];
 
 const SLOT_H = 36; // px — keep in sync with the h-9 rows below
