@@ -16,6 +16,7 @@ import { AgentsPage } from "./pages/Agents";
 import { SourcesPage } from "./pages/Sources";
 import { BuilderPage } from "./pages/Builder";
 import { LibraryPage } from "./pages/Library";
+import { ExportPage } from "./pages/Export";
 
 const rootRoute = createRootRoute({ component: Layout });
 
@@ -27,6 +28,7 @@ const routes = [
   createRoute({ getParentRoute: () => rootRoute, path: "/sources", component: SourcesPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/builder", component: BuilderPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/library", component: LibraryPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/export", component: ExportPage }),
 ];
 
 const router = createRouter({ routeTree: rootRoute.addChildren(routes) });

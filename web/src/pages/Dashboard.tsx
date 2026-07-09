@@ -157,6 +157,9 @@ export function Dashboard() {
           </span>
           {data.store.name}.loadout.tar.gz
         </a>
+        <Link to="/export" className="mt-2 block text-xs text-ink-faint transition-colors hover:text-ink">
+          or pick exactly what to share →
+        </Link>
 
         <BundleImport />
       </section>

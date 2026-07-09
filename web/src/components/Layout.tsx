@@ -9,6 +9,7 @@ const nav = [
   { to: "/sources", label: "Sources" },
   { to: "/builder", label: "Builder" },
   { to: "/library", label: "Library" },
+  { to: "/export", label: "Export" },
 ];
 
 const SLOT_H = 36; // px — keep in sync with the h-9 rows below
