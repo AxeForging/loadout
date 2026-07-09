@@ -115,8 +115,14 @@ func untarGz(archive, dir string) error {
 	}
 }
 
-// openBundle returns the bundle root for a directory or extracts a .tar.gz
-// into a temp dir (cleanup returned).
+// gzipMagic is the two-byte header every gzip stream starts with.
+var gzipMagic = []byte{0x1f, 0x8b}
+
+// openBundle returns the bundle root for a directory, extracts a .tar.gz
+// into a temp dir, or unpacks a single flat YAML document into a temp dir
+// shaped like a bundle — detected by content, not file extension, so it
+// works the same whether the path ends in .tar.gz, .yaml, or nothing at
+// all. cleanup is returned for the two temp-dir cases.
 func openBundle(src string) (root string, cleanup func(), err error) {
 	info, err := os.Stat(src)
 	if err != nil {
@@ -125,13 +131,30 @@ func openBundle(src string) (root string, cleanup func(), err error) {
 	if info.IsDir() {
 		return src, nil, nil
 	}
-	tmp, err := os.MkdirTemp("", "loadout-import-*")
+
+	f, err := os.Open(src)
 	if err != nil {
 		return "", nil, err
 	}
-	if err := untarGz(src, tmp); err != nil {
-		os.RemoveAll(tmp)
+	magic := make([]byte, 2)
+	n, _ := io.ReadFull(f, magic)
+	f.Close()
+
+	if n == 2 && magic[0] == gzipMagic[0] && magic[1] == gzipMagic[1] {
+		tmp, err := os.MkdirTemp("", "loadout-import-*")
+		if err != nil {
+			return "", nil, err
+		}
+		if err := untarGz(src, tmp); err != nil {
+			os.RemoveAll(tmp)
+			return "", nil, err
+		}
+		return tmp, func() { os.RemoveAll(tmp) }, nil
+	}
+
+	raw, err := os.ReadFile(src)
+	if err != nil {
 		return "", nil, err
 	}
-	return tmp, func() { os.RemoveAll(tmp) }, nil
+	return unpackFlat(raw)
 }

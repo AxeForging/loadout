@@ -269,6 +269,103 @@ func TestApply_SkipsConflictingProfileWithoutOverwrite(t *testing.T) {
 	}
 }
 
+func TestPlanImport_IncludesGroups(t *testing.T) {
+	src := testStore(t, "team-kit")
+	a, err := wizard.AddToLibrary(src, "always write tests first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wizard.SaveGroup(src, "testing-rules", []string{a.ID}); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "exported")
+	if _, err := Export(src, dest, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := testStore(t, "mine")
+	plan, err := PlanImport(fresh, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	if len(plan.NewGroups) != 1 || plan.NewGroups[0] != "testing-rules" {
+		t.Fatalf("NewGroups = %v, want [testing-rules]", plan.NewGroups)
+	}
+
+	if _, err := Apply(fresh, plan, false); err != nil {
+		t.Fatal(err)
+	}
+	groups, err := wizard.ListGroups(fresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].Name != "testing-rules" || len(groups[0].EntryIDs) != 1 {
+		t.Fatalf("imported groups = %v", groups)
+	}
+}
+
+func TestApply_SkipsConflictingGroupWithoutOverwrite(t *testing.T) {
+	src := testStore(t, "team-kit")
+	a, err := wizard.AddToLibrary(src, "entry a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wizard.SaveGroup(src, "rules", []string{a.ID}); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "exported")
+	if _, err := Export(src, dest, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	local := testStore(t, "mine")
+	b, err := wizard.AddToLibrary(local, "entry b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wizard.SaveGroup(local, "rules", []string{b.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := PlanImport(local, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	if len(plan.ConflictGroups) != 1 || plan.ConflictGroups[0] != "rules" {
+		t.Fatalf("ConflictGroups = %v", plan.ConflictGroups)
+	}
+
+	// Skip policy: local group untouched. Apply also needs entry "a" to
+	// exist locally before an overwrite could succeed.
+	if _, err := wizard.AddToLibrary(local, "entry a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(local, plan, false); err != nil {
+		t.Fatal(err)
+	}
+	groups, err := wizard.ListGroups(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].EntryIDs[0] != b.ID {
+		t.Fatalf("skip policy should leave the local group untouched, got %v", groups)
+	}
+
+	// Overwrite policy replaces membership with the bundle's version.
+	if _, err := Apply(local, plan, true); err != nil {
+		t.Fatal(err)
+	}
+	groups, err = wizard.ListGroups(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].EntryIDs[0] != a.ID {
+		t.Fatalf("overwrite policy should replace membership with the bundle's, got %v", groups)
+	}
+}
+
 func TestUntarGz_RejectsPathTraversal(t *testing.T) {
 	// Hand-craft a malicious archive.
 	dir := t.TempDir()

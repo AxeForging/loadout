@@ -18,6 +18,7 @@ vi.mock("../api", async () => {
       libraryInstructions: vi.fn(),
       libraryGroups: vi.fn(),
       bundleExportSelected: vi.fn(),
+      bundleExportFlat: vi.fn(),
     },
   };
 });
@@ -117,6 +118,32 @@ describe("ExportPage", () => {
     expect(clickSpy).toHaveBeenCalled();
 
     clickSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("switching to single-YAML format renders a copyable document instead of downloading an archive", async () => {
+    vi.mocked(api.bundleExportFlat).mockResolvedValue({ yaml: "apiVersion: loadout-config/v1\n" });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+
+    renderPage();
+    await screen.findByText("demo");
+    await userEvent.click(screen.getByText("demo"));
+    await userEvent.click(screen.getByText("single YAML file"));
+    await userEvent.click(screen.getByText("Export 1 item"));
+
+    expect(api.bundleExportFlat).toHaveBeenCalledWith({
+      artifactIds: ["demo"],
+      profileNames: [],
+      libraryEntryIds: [],
+      sources: false,
+    });
+    expect(await screen.findByDisplayValue("apiVersion: loadout-config/v1")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("copy"));
+    expect(writeText).toHaveBeenCalledWith("apiVersion: loadout-config/v1\n");
+    expect(await screen.findByText("copied ✓")).toBeInTheDocument();
+
     vi.unstubAllGlobals();
   });
 

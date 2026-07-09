@@ -2,10 +2,11 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type BundleImportPlan, type BundleImportResult } from "../api";
 
-// The receiving half of "share": pick a teammate's .loadout.tar.gz, review
-// the merge plan (new / conflicting / identical / sources), choose a
-// conflict policy, then confirm — mirrors SyncDock's plan → apply ritual,
-// just fed by an uploaded file instead of the local diff.
+// The receiving half of "share": pick a teammate's .loadout.tar.gz or paste
+// a single-file YAML export, review the merge plan (new / conflicting /
+// identical / sources), choose a conflict policy, then confirm — mirrors
+// SyncDock's plan → apply ritual, just fed by an uploaded file or pasted
+// text instead of the local diff.
 export function BundleImport() {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -13,9 +14,19 @@ export function BundleImport() {
   const [plan, setPlan] = useState<BundleImportPlan | null>(null);
   const [overwrite, setOverwrite] = useState(false);
   const [result, setResult] = useState<BundleImportResult | null>(null);
+  const [intake, setIntake] = useState<"file" | "paste">("file");
+  const [pastedYaml, setPastedYaml] = useState("");
 
   const planMutation = useMutation({
     mutationFn: (file: File) => api.bundleImportPlan(file),
+    onSuccess: (p) => {
+      setPlan(p);
+      setOverwrite(false);
+      setResult(null);
+    },
+  });
+  const planYamlMutation = useMutation({
+    mutationFn: (yaml: string) => api.bundleImportPlanYAML(yaml),
     onSuccess: (p) => {
       setPlan(p);
       setOverwrite(false);
@@ -28,6 +39,7 @@ export function BundleImport() {
       setResult(res);
       setPlan(null);
       setFileName(null);
+      setPastedYaml("");
       if (fileInput.current) fileInput.current.value = "";
       void queryClient.invalidateQueries();
     },
@@ -43,14 +55,28 @@ export function BundleImport() {
     planMutation.mutate(file);
   }
 
+  function reviewPastedYaml() {
+    if (!pastedYaml.trim()) return;
+    setResult(null);
+    planYamlMutation.mutate(pastedYaml);
+  }
+
+  function cancelPlan() {
+    setPlan(null);
+    setFileName(null);
+    setPastedYaml("");
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
   return (
     <div className="mt-6 border-t border-line pt-5">
       <p className="font-display text-xs font-semibold uppercase tracking-wider text-ink-dim">
         Import a bundle
       </p>
       <p className="mt-2 text-sm leading-relaxed text-ink-dim">
-        Received a <code className="font-mono text-xs text-ink">.loadout.tar.gz</code> from a
-        teammate? Upload it here to review and merge it into this store.
+        Received a <code className="font-mono text-xs text-ink">.loadout.tar.gz</code> or a single
+        YAML export from a teammate? Upload the file or paste the YAML here to review and merge it
+        into this store.
       </p>
 
       {result ? (
@@ -131,11 +157,7 @@ export function BundleImport() {
               {applyMutation.isPending ? "Importing…" : `Import ${changes}`}
             </button>
             <button
-              onClick={() => {
-                setPlan(null);
-                setFileName(null);
-                if (fileInput.current) fileInput.current.value = "";
-              }}
+              onClick={cancelPlan}
               className="px-2 py-1.5 text-sm text-ink-dim transition-colors hover:text-ink"
             >
               Cancel — write nothing
@@ -146,25 +168,71 @@ export function BundleImport() {
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex items-center gap-3">
-          <label className="btn-outline inline-flex cursor-pointer items-center gap-2">
-            <span aria-hidden className="font-mono text-ember">
-              ↑
-            </span>
-            {fileName ?? "Choose bundle…"}
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".tar.gz,.tgz,application/gzip"
-              className="hidden"
-              onChange={onFileChosen}
-            />
-          </label>
-          {planMutation.isPending ? (
-            <span className="text-xs text-ink-faint">Reviewing…</span>
-          ) : planMutation.isError ? (
-            <span className="text-xs text-danger">{String(planMutation.error)}</span>
-          ) : null}
+        <div className="mt-4">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIntake("file")}
+              data-on={intake === "file"}
+              className="chip"
+            >
+              choose file
+            </button>
+            <button
+              type="button"
+              onClick={() => setIntake("paste")}
+              data-on={intake === "paste"}
+              className="chip"
+            >
+              paste YAML
+            </button>
+          </div>
+
+          {intake === "file" ? (
+            <div className="mt-3 flex items-center gap-3">
+              <label className="btn-outline inline-flex cursor-pointer items-center gap-2">
+                <span aria-hidden className="font-mono text-ember">
+                  ↑
+                </span>
+                {fileName ?? "Choose bundle…"}
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept=".tar.gz,.tgz,application/gzip"
+                  className="hidden"
+                  onChange={onFileChosen}
+                />
+              </label>
+              {planMutation.isPending ? (
+                <span className="text-xs text-ink-faint">Reviewing…</span>
+              ) : planMutation.isError ? (
+                <span className="text-xs text-danger">{String(planMutation.error)}</span>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-3">
+              <textarea
+                value={pastedYaml}
+                onChange={(e) => setPastedYaml(e.target.value)}
+                placeholder="Paste a loadout-config/v1 YAML document…"
+                rows={8}
+                className="w-full resize-y overflow-x-auto border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed"
+              />
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={reviewPastedYaml}
+                  disabled={planYamlMutation.isPending || !pastedYaml.trim()}
+                  className="btn-outline"
+                >
+                  {planYamlMutation.isPending ? "Reviewing…" : "Review"}
+                </button>
+                {planYamlMutation.isError ? (
+                  <span className="text-xs text-danger">{String(planYamlMutation.error)}</span>
+                ) : null}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

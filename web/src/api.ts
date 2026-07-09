@@ -184,11 +184,18 @@ export const api = {
     request<{ removed: boolean }>(`/api/library/groups/${name}`, { method: "DELETE" }),
   bundleExportSelected: (sel: ExportSelection) =>
     requestBlob("/api/bundle/export", { method: "POST", body: JSON.stringify(sel) }),
+  bundleExportFlat: (sel: ExportSelection) =>
+    request<{ yaml: string }>("/api/bundle/export/flat", { method: "POST", body: JSON.stringify(sel) }),
   bundleImportPlan: (file: File) => {
     const form = new FormData();
     form.set("bundle", file);
     return requestUpload<BundleImportPlan>("/api/bundle/import/plan", form);
   },
+  bundleImportPlanYAML: (yaml: string) =>
+    request<BundleImportPlan>("/api/bundle/import/plan", {
+      method: "POST",
+      body: JSON.stringify({ yaml }),
+    }),
   bundleImportApply: (token: string, overwrite: boolean) =>
     request<BundleImportResult>("/api/bundle/import/apply", {
       method: "POST",

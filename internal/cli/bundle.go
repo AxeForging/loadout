@@ -3,12 +3,40 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/AxeForging/loadout/internal/build"
 	"github.com/AxeForging/loadout/internal/bundle"
+	"github.com/AxeForging/loadout/internal/store"
+	"github.com/AxeForging/loadout/internal/wizard"
 	"github.com/urfave/cli/v3"
 )
+
+// allArtifactIDs, allProfileNames and allLibraryEntryIDs resolve "export
+// everything" into explicit lists for ExportFlat, which — unlike
+// Export/ExportArchive — always takes an explicit Selection.
+func allArtifactIDs(s *store.Store) []string {
+	ids := make([]string, 0, len(s.Manifest.Artifacts))
+	for _, a := range s.Manifest.Artifacts {
+		ids = append(ids, a.ID)
+	}
+	return ids
+}
+
+func allProfileNames(s *store.Store) []string {
+	names, _ := wizard.ListProfiles(s)
+	return names
+}
+
+func allLibraryEntryIDs(s *store.Store) []string {
+	entries, _ := wizard.ListLibrary(s)
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	return ids
+}
 
 func bundleCmd() *cli.Command {
 	return &cli.Command{
@@ -21,6 +49,7 @@ func bundleCmd() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "out", Aliases: []string{"o"}, Usage: "Destination path (default: derived from the store name)"},
 					&cli.BoolFlag{Name: "archive", Usage: "Pack into a single .loadout.tar.gz instead of a directory"},
+					&cli.BoolFlag{Name: "flat", Usage: "Write a single self-contained YAML document instead of a directory/archive — small enough to paste into a gist or a doc"},
 					&cli.StringSliceFlag{Name: "artifacts", Usage: "Only export these artifact IDs (repeatable) — omit to export every artifact"},
 					&cli.StringSliceFlag{Name: "profiles", Usage: "Only export these saved profile names (repeatable) — omit to export none unless no selection flag is given at all"},
 					&cli.StringSliceFlag{Name: "library", Usage: "Only export these library entry IDs (repeatable) — omit to export none unless no selection flag is given at all"},
@@ -38,6 +67,36 @@ func bundleCmd() *cli.Command {
 					profileNames := cmd.StringSlice("profiles")
 					libraryIDs := cmd.StringSlice("library")
 					selective := len(artifactIDs) > 0 || len(profileNames) > 0 || len(libraryIDs) > 0
+					sel := bundle.Selection{
+						ArtifactIDs: artifactIDs, ProfileNames: profileNames, LibraryEntryIDs: libraryIDs, Sources: cmd.Bool("sources"),
+					}
+
+					if cmd.Bool("flat") {
+						if out == "" {
+							out = s.Manifest.Name + ".loadout.yaml"
+						}
+						// ExportFlat always takes an explicit Selection (no
+						// built-in "everything" mode like Export/
+						// ExportArchive have) — no selection flag at all
+						// means resolve "everything" ourselves.
+						if !selective {
+							sel = bundle.Selection{
+								ArtifactIDs:     allArtifactIDs(s),
+								ProfileNames:    allProfileNames(s),
+								LibraryEntryIDs: allLibraryEntryIDs(s),
+								Sources:         true,
+							}
+						}
+						raw, err := bundle.ExportFlat(s, createdBy, sel)
+						if err != nil {
+							return err
+						}
+						if err := os.WriteFile(out, raw, 0o644); err != nil {
+							return err
+						}
+						fmt.Printf("Exported to %s\n", out)
+						return nil
+					}
 
 					if cmd.Bool("archive") {
 						if out == "" {
@@ -45,9 +104,7 @@ func bundleCmd() *cli.Command {
 						}
 						var meta bundle.Meta
 						if selective {
-							meta, err = bundle.ExportSelectedArchive(s, out, createdBy, bundle.Selection{
-								ArtifactIDs: artifactIDs, ProfileNames: profileNames, LibraryEntryIDs: libraryIDs, Sources: cmd.Bool("sources"),
-							})
+							meta, err = bundle.ExportSelectedArchive(s, out, createdBy, sel)
 						} else {
 							meta, err = bundle.ExportArchive(s, out, createdBy)
 						}
@@ -63,9 +120,7 @@ func bundleCmd() *cli.Command {
 					}
 					var meta bundle.Meta
 					if selective {
-						meta, err = bundle.ExportSelected(s, out, createdBy, bundle.Selection{
-							ArtifactIDs: artifactIDs, ProfileNames: profileNames, LibraryEntryIDs: libraryIDs, Sources: cmd.Bool("sources"),
-						})
+						meta, err = bundle.ExportSelected(s, out, createdBy, sel)
 					} else {
 						meta, err = bundle.Export(s, out, createdBy)
 					}
@@ -144,6 +199,16 @@ func bundleCmd() *cli.Command {
 							noun = "entries"
 						}
 						fmt.Printf("  + %d custom-instruction library %s\n", n, noun)
+					}
+					for _, name := range plan.NewGroups {
+						fmt.Printf("  + library group %s\n", name)
+					}
+					for _, name := range plan.ConflictGroups {
+						action := "skip (exists locally with different members)"
+						if overwrite {
+							action = "OVERWRITE local version"
+						}
+						fmt.Printf("  ! library group %s — %s\n", name, action)
 					}
 					if len(plan.Identical) > 0 {
 						fmt.Printf("  = %d artifact(s) identical, nothing to do\n", len(plan.Identical))
