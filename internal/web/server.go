@@ -91,6 +91,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/library/instructions", s.handleLibraryList)
 	s.mux.HandleFunc("POST /api/library/instructions", s.handleLibraryAdd)
 	s.mux.HandleFunc("DELETE /api/library/instructions/{id}", s.handleLibraryDelete)
+	s.mux.HandleFunc("GET /api/library/groups", s.handleLibraryGroupsList)
+	s.mux.HandleFunc("POST /api/library/groups", s.handleLibraryGroupSave)
+	s.mux.HandleFunc("DELETE /api/library/groups/{name}", s.handleLibraryGroupDelete)
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
@@ -547,6 +550,40 @@ func (s *Server) handleLibraryAdd(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLibraryDelete(w http.ResponseWriter, r *http.Request) {
 	if err := wizard.RemoveFromLibrary(s.opts.Engine.Store, r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
+}
+
+func (s *Server) handleLibraryGroupsList(w http.ResponseWriter, r *http.Request) {
+	groups, err := wizard.ListGroups(s.opts.Engine.Store)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, groups)
+}
+
+func (s *Server) handleLibraryGroupSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name     string   `json:"name"`
+		EntryIDs []string `json:"entryIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	group, err := wizard.SaveGroup(s.opts.Engine.Store, req.Name, req.EntryIDs)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, group)
+}
+
+func (s *Server) handleLibraryGroupDelete(w http.ResponseWriter, r *http.Request) {
+	if err := wizard.RemoveGroup(s.opts.Engine.Store, r.PathValue("name")); err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
 	}

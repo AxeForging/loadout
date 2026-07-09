@@ -373,6 +373,75 @@ func TestAPI_LibraryAddListDelete(t *testing.T) {
 	}
 }
 
+func TestAPI_LibraryGroupsSaveListDelete(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	rec, out := doJSON(t, h, "POST", "/api/library/instructions", map[string]string{"text": "always write tests first"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("add library entry = %d: %s", rec.Code, rec.Body)
+	}
+	entryID, _ := out["id"].(string)
+
+	req := httptest.NewRequest("GET", "/api/library/groups", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list) != 0 {
+		t.Fatalf("groups list on empty store = %v, %v", list, err)
+	}
+
+	rec, out = doJSON(t, h, "POST", "/api/library/groups", map[string]any{
+		"name": "testing-rules", "entryIds": []string{entryID},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save group = %d: %s", rec.Code, rec.Body)
+	}
+	if out["name"] != "testing-rules" {
+		t.Fatalf("save group response = %v", out)
+	}
+
+	// Unknown entry ID is rejected.
+	rec, _ = doJSON(t, h, "POST", "/api/library/groups", map[string]any{
+		"name": "bad-group", "entryIds": []string{"does-not-exist"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("save group with unknown entry = %d, want 400", rec.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/library/groups", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list) != 1 || list[0]["name"] != "testing-rules" {
+		t.Fatalf("groups list after save = %v", list)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/library/groups/testing-rules", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete group = %d: %s", rec.Code, rec.Body)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/library/groups/testing-rules", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("delete already-deleted group = %d, want 404", rec.Code)
+	}
+
+	// Deleting the group must not have touched the underlying entry.
+	req = httptest.NewRequest("GET", "/api/library/instructions", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var entries []map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &entries)
+	if len(entries) != 1 {
+		t.Fatalf("library entries after group delete = %v, want the entry untouched", entries)
+	}
+}
+
 func TestSPA_FallbackServesIndexForClientRoutes(t *testing.T) {
 	srv, _ := newTestServer(t)
 	for _, path := range []string{"/", "/agents", "/store/some-artifact"} {

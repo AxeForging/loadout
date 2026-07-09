@@ -59,6 +59,7 @@ export type WizardSection = { id: string; title: string; questions: WizardQuesti
 export type Answers = Record<string, unknown>;
 
 export type LibraryEntry = { id: string; text: string; createdAt: string };
+export type LibraryGroup = { name: string; entryIds: string[]; createdAt: string };
 
 export type BundleMeta = { name: string; createdBy: string; createdAt: string; artifacts: number };
 export type BundleImportPlan = {
@@ -150,6 +151,14 @@ export const api = {
     }),
   libraryRemove: (id: string) =>
     request<{ removed: boolean }>(`/api/library/instructions/${id}`, { method: "DELETE" }),
+  libraryGroups: () => request<LibraryGroup[]>("/api/library/groups"),
+  libraryGroupSave: (name: string, entryIds: string[]) =>
+    request<LibraryGroup>("/api/library/groups", {
+      method: "POST",
+      body: JSON.stringify({ name, entryIds }),
+    }),
+  libraryGroupRemove: (name: string) =>
+    request<{ removed: boolean }>(`/api/library/groups/${name}`, { method: "DELETE" }),
   bundleImportPlan: (file: File) => {
     const form = new FormData();
     form.set("bundle", file);
