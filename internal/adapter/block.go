@@ -113,6 +113,41 @@ func CheckBlocks(doc []byte) []string {
 	return problems
 }
 
+// RemoveBlock strips the managed block for id out of doc, collapsing the
+// surrounding whitespace to at most one blank-line separator (never a
+// double blank line) between whatever remains before and after it. Content
+// outside the block is otherwise preserved byte-for-byte. A missing block
+// is a no-op (found=false, doc returned unchanged). A begin marker with no
+// matching end marker errors — the same "don't guess on structural damage"
+// behavior as UpsertBlock and CheckBlocks.
+func RemoveBlock(doc []byte, id string) (result []byte, found bool, err error) {
+	begin := []byte(blockBegin(id))
+	end := []byte(blockEnd(id))
+	start := bytes.Index(doc, begin)
+	if start < 0 {
+		return doc, false, nil
+	}
+	rest := doc[start:]
+	endIdx := bytes.Index(rest, end)
+	if endIdx < 0 {
+		return nil, false, fmt.Errorf("block %q has a begin marker but no end marker", id)
+	}
+
+	before := bytes.TrimRight(doc[:start], "\n")
+	after := bytes.TrimLeft(rest[endIdx+len(end):], "\n")
+
+	var buf bytes.Buffer
+	buf.Write(before)
+	switch {
+	case len(before) > 0 && len(after) > 0:
+		buf.WriteString("\n\n")
+	case len(before) > 0:
+		buf.WriteString("\n")
+	}
+	buf.Write(after)
+	return buf.Bytes(), true, nil
+}
+
 // ExtractBlock returns the managed block (markers included) for id, or nil.
 func ExtractBlock(doc []byte, id string) []byte {
 	begin := []byte(blockBegin(id))

@@ -109,3 +109,33 @@ func confirmApply(cmd *cli.Command) func(*engine.Plan) bool {
 		return answer == "y" || answer == "yes"
 	}
 }
+
+// printRemovals lists what a loadout switch would remove, plus any
+// artifact×file pairs the engine could not safely remove automatically.
+func printRemovals(rp *engine.RemovalPlan) {
+	for _, it := range rp.Items {
+		fmt.Printf("  %-6s %s: %s  (%s)\n", it.Op, it.Agent, it.RelPath, it.Artifact.ID)
+	}
+	for _, w := range rp.Warnings {
+		fmt.Printf("  ! %s %s: %s — %s\n", w.Agent, w.Artifact, w.RelPath, w.Reason)
+	}
+}
+
+// confirmSwitch prompts on stdin unless --yes was passed, summing the
+// install and removal change counts. CLI side of ApplySwitch's confirm gate.
+func confirmSwitch(cmd *cli.Command, install *engine.Plan, removal *engine.RemovalPlan) func(*engine.Plan, *engine.RemovalPlan) bool {
+	return func(*engine.Plan, *engine.RemovalPlan) bool {
+		if cmd.Bool("yes") {
+			return true
+		}
+		total := len(install.Changes()) + len(removal.Items)
+		fmt.Printf("\nApply %d change(s)? [y/N]: ", total)
+		reader := bufio.NewReader(os.Stdin)
+		answer, err := reader.ReadString('\n')
+		if err != nil {
+			return false
+		}
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		return answer == "y" || answer == "yes"
+	}
+}

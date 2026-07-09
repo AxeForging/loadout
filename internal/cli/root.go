@@ -26,6 +26,7 @@ func Commands() []*cli.Command {
 		bundleCmd(),
 		wizardCmd(),
 		profileCmd(),
+		loadoutsCmd(),
 		tuiCmd(),
 		serveCmd(),
 		agentsCmd(),
