@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { useConfirmedAction } from "../hooks/useConfirmedAction";
+import { LibraryEntryRow } from "./LibraryEntryRow";
 
 // Row-based editor for the "list" question type: type an instruction, press
 // Enter to add it as a row; each row can be deleted or saved to a
@@ -15,12 +17,10 @@ export function InstructionListEditor({
   onChange: (v: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState("");
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const confirmTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { confirmingId: confirmingDeleteId, requestConfirm: requestDeleteConfirm, cancelIfArmed } = useConfirmedAction();
   const queryClient = useQueryClient();
   const library = useQuery({ queryKey: ["library"], queryFn: api.libraryInstructions });
+  const groups = useQuery({ queryKey: ["library-groups"], queryFn: api.libraryGroups });
 
   const saveMutation = useMutation({
     mutationFn: (text: string) => api.libraryAdd(text),
@@ -34,57 +34,37 @@ export function InstructionListEditor({
   const savedTexts = new Set((library.data ?? []).map((e) => e.text));
 
   function addRow(text: string) {
-    const trimmed = text.trim();
-    if (trimmed === "" || value.includes(trimmed)) return;
-    onChange([...value, trimmed]);
+    addRows([text]);
+  }
+
+  // Adds every text not already present in one onChange call. Looping
+  // addRow per item would have each call close over the same stale `value`
+  // prop and clobber the others instead of accumulating — this computes the
+  // full next array once.
+  function addRows(texts: string[]) {
+    const seen = new Set(value);
+    const toAdd: string[] = [];
+    for (const raw of texts) {
+      const trimmed = raw.trim();
+      if (trimmed !== "" && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        toAdd.push(trimmed);
+      }
+    }
+    if (toAdd.length > 0) onChange([...value, ...toAdd]);
   }
 
   function removeRow(index: number) {
     onChange(value.filter((_, i) => i !== index));
-    if (editingIndex === index) setEditingIndex(null);
   }
-
-  function startEdit(index: number) {
-    setEditingIndex(index);
-    setEditDraft(value[index]);
-  }
-
-  function commitEdit() {
-    if (editingIndex === null) return;
-    const trimmed = editDraft.trim();
-    if (trimmed === "") {
-      removeRow(editingIndex);
-    } else {
-      onChange(value.map((v, i) => (i === editingIndex ? trimmed : v)));
-    }
-    setEditingIndex(null);
-    setEditDraft("");
-  }
-
-  function cancelEdit() {
-    setEditingIndex(null);
-    setEditDraft("");
-  }
-
-  useEffect(() => {
-    return () => {
-      if (confirmTimeout.current) clearTimeout(confirmTimeout.current);
-    };
-  }, []);
 
   // Deleting a library entry is permanent (unlike removing a row from the
   // in-progress list above, which only edits local state until the wizard
   // is generated) — arm on the first click, require a second click within
-  // 3s to actually delete, so a stray click never silently destroys it.
+  // the confirm window to actually delete, so a stray click never silently
+  // destroys it.
   function requestDeleteFromLibrary(id: string) {
-    if (confirmTimeout.current) clearTimeout(confirmTimeout.current);
-    if (confirmingDeleteId === id) {
-      setConfirmingDeleteId(null);
-      removeMutation.mutate(id);
-      return;
-    }
-    setConfirmingDeleteId(id);
-    confirmTimeout.current = setTimeout(() => setConfirmingDeleteId(null), 3000);
+    if (requestDeleteConfirm(id)) removeMutation.mutate(id);
   }
 
   return (
@@ -124,33 +104,11 @@ export function InstructionListEditor({
               className="rise flex items-start gap-3 py-0.5 font-mono text-sm text-ink"
               style={{ "--i": i } as CSSProperties}
             >
-              {editingIndex === i ? (
-                <input
-                  type="text"
-                  autoFocus
-                  value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitEdit();
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      cancelEdit();
-                    }
-                  }}
-                  onBlur={commitEdit}
-                  className="field min-w-0 flex-1"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => startEdit(i)}
-                  className="min-w-0 flex-1 whitespace-normal break-words text-left transition-colors hover:text-ember"
-                >
-                  {item}
-                </button>
-              )}
+              <LibraryEntryRow
+                text={item}
+                onSave={(newText) => onChange(value.map((v, idx) => (idx === i ? newText : v)))}
+                onEmptyCommit={() => removeRow(i)}
+              />
               <button
                 type="button"
                 onClick={() => saveMutation.mutate(item)}
@@ -193,7 +151,7 @@ export function InstructionListEditor({
                   <button
                     type="button"
                     onClick={() => requestDeleteFromLibrary(entry.id)}
-                    onBlur={() => setConfirmingDeleteId((id) => (id === entry.id ? null : id))}
+                    onBlur={() => cancelIfArmed(entry.id)}
                     aria-label={
                       confirmingDeleteId === entry.id
                         ? `confirm delete ${entry.text} from library`
@@ -208,6 +166,36 @@ export function InstructionListEditor({
                     {confirmingDeleteId === entry.id ? "confirm ×" : "×"}
                   </button>
                 </span>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {(groups.data ?? []).length > 0 ? (
+        <div className="mt-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">groups</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(groups.data ?? []).map((group) => {
+              const entryTexts = group.entryIds
+                .map((id) => (library.data ?? []).find((e) => e.id === id)?.text)
+                .filter((t): t is string => Boolean(t));
+              const allActive = entryTexts.length > 0 && entryTexts.every((t) => value.includes(t));
+              return (
+                <button
+                  key={group.name}
+                  type="button"
+                  onClick={() => addRows(entryTexts)}
+                  data-on={allActive}
+                  className="chip"
+                >
+                  {allActive ? (
+                    <span aria-hidden className="mr-1.5 align-middle font-mono text-[9px]">
+                      ■
+                    </span>
+                  ) : null}
+                  {group.name} ({entryTexts.length})
+                </button>
               );
             })}
           </div>

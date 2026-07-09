@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InstructionListEditor } from "./InstructionListEditor";
-import { api, type LibraryEntry } from "../api";
+import { api, type LibraryEntry, type LibraryGroup } from "../api";
 
 // This suite renders several instances of the same component; the setup
 // file does not register global auto-cleanup (no `globals: true`), so each
@@ -20,8 +20,13 @@ vi.mock("../api", async () => {
       libraryInstructions: vi.fn(),
       libraryAdd: vi.fn(),
       libraryRemove: vi.fn(),
+      libraryGroups: vi.fn(),
     },
   };
+});
+
+beforeEach(() => {
+  vi.mocked(api.libraryGroups).mockResolvedValue([]);
 });
 
 function renderEditor(value: string[], onChange: (v: string[]) => void) {
@@ -83,6 +88,29 @@ describe("InstructionListEditor", () => {
     await userEvent.click(screen.getByText("no coverage theater"));
 
     expect(onChange).toHaveBeenCalledWith(["no coverage theater"]);
+  });
+
+  it("adds every member entry when a group chip is clicked", async () => {
+    const twoEntries: LibraryEntry[] = [
+      { id: "abc123", text: "no coverage theater", createdAt: "2026-01-01T00:00:00Z" },
+      { id: "def456", text: "always write tests first", createdAt: "2026-01-01T00:00:00Z" },
+    ];
+    const testingGroup: LibraryGroup = {
+      name: "testing-rules",
+      entryIds: ["abc123", "def456"],
+      createdAt: "2026-01-01T00:00:00Z",
+    };
+    vi.mocked(api.libraryInstructions).mockResolvedValue(twoEntries);
+    vi.mocked(api.libraryGroups).mockResolvedValue([testingGroup]);
+    const onChange = vi.fn();
+    renderEditor([], onChange);
+
+    await userEvent.click(await screen.findByText("testing-rules (2)"));
+
+    // One call with both entries — looping addRow per item would have each
+    // call close over the same stale `value` prop and clobber the others.
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(["no coverage theater", "always write tests first"]);
   });
 
   it("arms but does not delete a library entry on the first click", async () => {
