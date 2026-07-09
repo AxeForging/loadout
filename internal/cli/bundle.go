@@ -103,6 +103,23 @@ func bundleCmd() *cli.Command {
 					for _, src := range plan.Sources {
 						fmt.Printf("  + source %s (%s)\n", src.Name, src.URL)
 					}
+					for _, name := range plan.NewProfiles {
+						fmt.Printf("  + profile %s\n", name)
+					}
+					for _, name := range plan.ConflictProfiles {
+						action := "skip (exists locally with different content)"
+						if overwrite {
+							action = "OVERWRITE local version"
+						}
+						fmt.Printf("  ! profile %s — %s\n", name, action)
+					}
+					if n := len(plan.NewLibraryEntries); n > 0 {
+						noun := "entry"
+						if n != 1 {
+							noun = "entries"
+						}
+						fmt.Printf("  + %d custom-instruction library %s\n", n, noun)
+					}
 					if len(plan.Identical) > 0 {
 						fmt.Printf("  = %d artifact(s) identical, nothing to do\n", len(plan.Identical))
 					}

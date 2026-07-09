@@ -203,7 +203,7 @@ loadout bundle import team-kit.loadout.tar.gz   # shows the merge plan, asks
 loadout sync                                    # installs into their agents
 ```
 
-A bundle is the store tree plus `bundle.yaml` metadata — a plain directory by default (commit it to a repo) or a single archive with `--archive`. Import never merges silently: new artifacts and unregistered sources are listed, ID conflicts are skipped unless you pass `--on-conflict overwrite`, and nothing happens without confirmation.
+A bundle is the store tree plus `bundle.yaml` metadata — a plain directory by default (commit it to a repo) or a single archive with `--archive`. Import never merges silently: new artifacts and unregistered sources are listed, ID conflicts are skipped unless you pass `--on-conflict overwrite`, and nothing happens without confirmation. Saved wizard profiles and the custom-instructions library travel with the bundle too — new profiles are added, conflicting ones follow the same `--on-conflict` policy as artifacts, and library entries always merge (they're deduplicated by content, so re-importing one is a safe no-op).
 
 The web UI covers the same import flow for `.loadout.tar.gz` archives: from the dashboard's "share" section, upload the file, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only.
 

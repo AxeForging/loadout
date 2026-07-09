@@ -8,6 +8,7 @@ import (
 
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/store"
+	"github.com/AxeForging/loadout/internal/wizard"
 )
 
 func testStore(t *testing.T, name string) *store.Store {
@@ -144,6 +145,127 @@ func TestPlanImport_RejectsNonBundles(t *testing.T) {
 	local := testStore(t, "mine")
 	if _, err := PlanImport(local, t.TempDir()); err == nil {
 		t.Fatal("directory without bundle.yaml must be rejected")
+	}
+}
+
+func TestPlanImport_IncludesProfilesAndLibrary(t *testing.T) {
+	src := testStore(t, "team-kit")
+	if err := wizard.SaveProfile(src, "acme-backend", wizard.Answers{"toolchain.docker": true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wizard.AddToLibrary(src, "always write tests first"); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "exported")
+	if _, err := Export(src, dest, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := testStore(t, "mine")
+	plan, err := PlanImport(fresh, dest)
+	if err != nil {
+		t.Fatalf("PlanImport() error = %v", err)
+	}
+	defer plan.Close()
+
+	if len(plan.NewProfiles) != 1 || plan.NewProfiles[0] != "acme-backend" {
+		t.Errorf("NewProfiles = %v, want [acme-backend]", plan.NewProfiles)
+	}
+	if len(plan.ConflictProfiles) != 0 {
+		t.Errorf("ConflictProfiles = %v, want none", plan.ConflictProfiles)
+	}
+	if len(plan.NewLibraryEntries) != 1 || plan.NewLibraryEntries[0].Text != "always write tests first" {
+		t.Errorf("NewLibraryEntries = %v", plan.NewLibraryEntries)
+	}
+}
+
+func TestApply_MergesProfilesAndLibrary(t *testing.T) {
+	src := testStore(t, "team-kit")
+	if err := wizard.SaveProfile(src, "acme-backend", wizard.Answers{"toolchain.docker": true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wizard.AddToLibrary(src, "always write tests first"); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "exported")
+	if _, err := Export(src, dest, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := testStore(t, "mine")
+	plan, err := PlanImport(fresh, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	if _, err := Apply(fresh, plan, false); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	a, err := wizard.LoadProfile(fresh, "acme-backend")
+	if err != nil {
+		t.Fatalf("profile not merged: %v", err)
+	}
+	if !a.Bool("toolchain.docker") {
+		t.Error("merged profile lost its answers")
+	}
+
+	entries, err := wizard.ListLibrary(fresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Text != "always write tests first" {
+		t.Errorf("library not merged: %v", entries)
+	}
+}
+
+func TestApply_SkipsConflictingProfileWithoutOverwrite(t *testing.T) {
+	src := testStore(t, "team-kit")
+	if err := wizard.SaveProfile(src, "acme-backend", wizard.Answers{"toolchain.docker": true}); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "exported")
+	if _, err := Export(src, dest, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	local := testStore(t, "mine")
+	if err := wizard.SaveProfile(local, "acme-backend", wizard.Answers{"toolchain.docker": false}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := PlanImport(local, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	if len(plan.ConflictProfiles) != 1 || plan.ConflictProfiles[0] != "acme-backend" {
+		t.Fatalf("ConflictProfiles = %v", plan.ConflictProfiles)
+	}
+
+	// Skip policy: local content untouched.
+	if _, err := Apply(local, plan, false); err != nil {
+		t.Fatal(err)
+	}
+	a, err := wizard.LoadProfile(local, "acme-backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Bool("toolchain.docker") {
+		t.Fatal("skip policy overwrote local profile")
+	}
+
+	// Overwrite policy replaces it.
+	if _, err := Apply(local, plan, true); err != nil {
+		t.Fatal(err)
+	}
+	a, err = wizard.LoadProfile(local, "acme-backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.Bool("toolchain.docker") {
+		t.Fatal("overwrite policy did not replace local profile")
 	}
 }
 
