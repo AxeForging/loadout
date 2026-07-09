@@ -25,6 +25,16 @@ func customName(a Answers, id, def string) string {
 	return def
 }
 
+// namespacePrefix resolves the team's optional command/skill namespace,
+// applying the same lenient validation as customName — an absent or invalid
+// prefix yields "" (no prefixing).
+func namespacePrefix(a Answers) string {
+	if v := strings.TrimSpace(a.Str("naming.prefix")); v != "" && store.ValidateName(v) == nil {
+		return v
+	}
+	return ""
+}
+
 func labelOf(questionID, value string) string {
 	for _, q := range Questions() {
 		if q.ID != questionID {

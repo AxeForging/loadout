@@ -164,6 +164,11 @@ type ImportPlan struct {
 	NewGroups      []string
 	ConflictGroups []string
 
+	// Warnings flag incoming artifacts whose name would shadow an agent
+	// built-in slash command (e.g. a bundle's "plan" command). Advisory only —
+	// import is never blocked by them.
+	Warnings []string
+
 	bundleRoot string
 	cleanup    func()
 }
@@ -328,6 +333,14 @@ func PlanImport(s *store.Store, src string) (*ImportPlan, error) {
 	sort.Slice(plan.Conflicts, func(i, j int) bool { return plan.Conflicts[i].ID < plan.Conflicts[j].ID })
 	sort.Strings(plan.NewProfiles)
 	sort.Strings(plan.ConflictProfiles)
+
+	// Flag incoming artifacts that would shadow an agent built-in — advisory
+	// only, computed over everything the import could write.
+	for _, art := range append(append([]domain.Artifact{}, plan.New...), plan.Conflicts...) {
+		if w := domain.ReservedNameWarning(art.Kind, art.ID); w != "" {
+			plan.Warnings = append(plan.Warnings, w)
+		}
+	}
 	return plan, nil
 }
 

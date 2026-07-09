@@ -24,6 +24,7 @@ func installCmd() *cli.Command {
 				Name:  "dry-run",
 				Usage: "Show the plan and exit without writing",
 			},
+			forceFlag(),
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			agent := cmd.Args().First()

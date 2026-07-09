@@ -67,15 +67,25 @@ type artifactSpec struct {
 }
 
 func artifactSpecs(a Answers) []artifactSpec {
-	// Command/skill names default to today's fixed IDs, but a team can
-	// rename any of them (e.g. /sdd-workflow -> /fe-sdd-workflow) — the
-	// custom name becomes both the store artifact ID and, for commands,
-	// the synced slash-command name.
-	handoffID := customName(a, "continuity.handoffCommandName", "handoff")
-	resumeID := customName(a, "continuity.resumeCommandName", "resume")
-	specID := customName(a, "sdd.specCommandName", "spec")
-	planID := customName(a, "sdd.planCommandName", "plan")
-	workflowID := customName(a, "sdd.workflowSkillName", "sdd-workflow")
+	// Command/skill names default to today's fixed IDs, but a team can rename
+	// any of them, and an optional namespace prefix (e.g. "af" → /af-plan)
+	// keeps generated slash commands from clashing with agent built-ins like
+	// /plan. The prefix applies only to names left at their default; an
+	// explicit rename wins verbatim. The resolved name becomes both the store
+	// artifact ID and, for commands, the synced slash-command name.
+	prefix := namespacePrefix(a)
+	named := func(id, def string) string {
+		v := customName(a, id, def)
+		if prefix != "" && v == def {
+			return prefix + "-" + def
+		}
+		return v
+	}
+	handoffID := named("continuity.handoffCommandName", "handoff")
+	resumeID := named("continuity.resumeCommandName", "resume")
+	specID := named("sdd.specCommandName", "spec")
+	planID := named("sdd.planCommandName", "plan")
+	workflowID := named("sdd.workflowSkillName", "sdd-workflow")
 
 	specs := []artifactSpec{
 		{id: "core", kind: domain.KindInstruction, files: map[string]string{"": coreInstruction(a)}},
@@ -117,6 +127,19 @@ func artifactSpecs(a Answers) []artifactSpec {
 		)
 	}
 	return specs
+}
+
+// NameWarnings reports generated command/skill names that would shadow an
+// agent's built-in slash command, so a surface can warn (never block) before
+// generating. A namespace prefix or explicit rename clears the warning.
+func NameWarnings(a Answers) []string {
+	var out []string
+	for _, spec := range artifactSpecs(a) {
+		if w := domain.ReservedNameWarning(spec.kind, spec.id); w != "" {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 var kindDirs = map[domain.ArtifactKind]string{

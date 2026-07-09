@@ -304,7 +304,9 @@ function ReviewStep({
   answers,
   onBack,
 }: {
-  plan: ReturnType<typeof useMutation<{ create: string[]; skip: string[] }, Error, void>>;
+  plan: ReturnType<
+    typeof useMutation<{ create: string[]; skip: string[]; warnings: string[] }, Error, void>
+  >;
   generate: ReturnType<typeof useMutation<{ created: string[]; skipped: string[] }, Error, void>>;
   answers: Answers;
   onBack: () => void;
@@ -373,6 +375,13 @@ function ReviewStep({
             <p className="mt-3 font-mono text-xs text-ink-faint">
               kept untouched (already exist): {plan.data.skip.join(" · ")}
             </p>
+          ) : null}
+          {plan.data.warnings.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-xs text-warn">
+              {plan.data.warnings.map((w, i) => (
+                <li key={`warn-${i}`}>! {w}</li>
+              ))}
+            </ul>
           ) : null}
           <div className="mt-7 flex items-center gap-3">
             <button

@@ -40,12 +40,13 @@ const samplePlan: BundleImportPlan = {
   conflicts: [],
   identical: [],
   sources: [],
+  warnings: [],
 };
 
 describe("BundleImport", () => {
   it("renders the idle upload prompt", () => {
     renderWithClient();
-    expect(screen.getByText("Choose bundle…")).toBeInTheDocument();
+    expect(screen.getByText("Choose bundle or YAML…")).toBeInTheDocument();
   });
 
   it("shows a pending state while the plan request is in flight", async () => {
@@ -91,7 +92,7 @@ describe("BundleImport", () => {
     renderWithClient();
 
     await userEvent.click(screen.getByText("paste YAML"));
-    expect(screen.queryByText("Choose bundle…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Choose bundle or YAML…")).not.toBeInTheDocument();
 
     await userEvent.type(
       screen.getByPlaceholderText(/Paste a loadout-config\/v1 YAML document/),
@@ -108,5 +109,27 @@ describe("BundleImport", () => {
     await userEvent.click(screen.getByText("paste YAML"));
 
     expect(screen.getByText("Review")).toBeDisabled();
+  });
+
+  it("accepts YAML files in the file picker, not just tar.gz", () => {
+    renderWithClient();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const accept = input.getAttribute("accept") ?? "";
+    expect(accept).toContain(".yaml");
+    expect(accept).toContain(".yml");
+    expect(accept).toContain(".tar.gz");
+  });
+
+  it("surfaces reserved-name warnings in the plan review", async () => {
+    vi.mocked(api.bundleImportPlan).mockResolvedValue({
+      ...samplePlan,
+      warnings: ["plan collides with Claude Code's built-in /plan"],
+    });
+    renderWithClient();
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, bundleFile);
+
+    await waitFor(() => expect(screen.getByText(/built-in \/plan/)).toBeInTheDocument());
   });
 });

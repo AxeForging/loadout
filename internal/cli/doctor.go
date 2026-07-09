@@ -43,6 +43,9 @@ func doctorCmd() *cli.Command {
 				if err := checkArtifact(s, art); err != nil {
 					fail("artifact %s: %v", art.ID, err)
 				}
+				if w := domain.ReservedNameWarning(art.Kind, art.ID); w != "" {
+					note("artifact %q: %s", art.ID, w)
+				}
 			}
 
 			fmt.Println("Agents:")

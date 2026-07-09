@@ -55,6 +55,18 @@ func Sections() []Section {
 			},
 		},
 		{
+			ID:    "naming",
+			Title: "Naming — avoid clashing with agent built-ins",
+			Questions: []Question{
+				{
+					ID:      "naming.prefix",
+					Prompt:  "Optional namespace prefix for generated commands/skills (e.g. \"af\" → /af-plan, /af-spec). Leave empty for none.",
+					Type:    TypeText,
+					Default: "",
+				},
+			},
+		},
+		{
 			ID:    "toolchain",
 			Title: "Toolchain — what do you use?",
 			Questions: []Question{
@@ -126,9 +138,9 @@ func Sections() []Section {
 					Options: opts("light", "Light — problem, approach, checklist", "full", "Full — context, requirements, design, test plan, rollout"),
 					Default: "light",
 				},
-				{ID: "sdd.specCommandName", Prompt: "Name for the spec-drafting command (default: spec)", Type: TypeText, Default: "spec"},
-				{ID: "sdd.planCommandName", Prompt: "Name for the plan command (default: plan)", Type: TypeText, Default: "plan"},
-				{ID: "sdd.workflowSkillName", Prompt: "Name for the SDD workflow skill (default: sdd-workflow, e.g. \"fe-sdd-workflow\")", Type: TypeText, Default: "sdd-workflow"},
+				{ID: "sdd.specCommandName", Prompt: "Name for the spec-drafting command (default: spec; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "spec"},
+				{ID: "sdd.planCommandName", Prompt: "Name for the plan command (default: plan; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "plan"},
+				{ID: "sdd.workflowSkillName", Prompt: "Name for the SDD workflow skill (default: sdd-workflow; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "sdd-workflow"},
 				{
 					ID: "sdd.changeScope", Prompt: "How aggressively should implementation change the codebase?", Type: TypeSelect,
 					Options: opts(
@@ -181,8 +193,8 @@ func Sections() []Section {
 					Prompt: "Enable cross-agent context handoff (/handoff dumps session state to .agents/context/, /resume picks it up — works across agents and restarts)?",
 					Type:   TypeBool, Default: true,
 				},
-				{ID: "continuity.handoffCommandName", Prompt: "Name for the handoff command (default: handoff)", Type: TypeText, Default: "handoff"},
-				{ID: "continuity.resumeCommandName", Prompt: "Name for the resume command (default: resume)", Type: TypeText, Default: "resume"},
+				{ID: "continuity.handoffCommandName", Prompt: "Name for the handoff command (default: handoff; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "handoff"},
+				{ID: "continuity.resumeCommandName", Prompt: "Name for the resume command (default: resume; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "resume"},
 			},
 		},
 		{

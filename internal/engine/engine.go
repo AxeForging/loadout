@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/domain"
@@ -26,6 +27,21 @@ type Engine struct {
 	Store     *store.Store
 	Registry  *adapter.Registry
 	StatePath string
+	// BackupDir is where pre-write snapshots are stored. Empty disables
+	// snapshotting (e.g. in unit tests that don't exercise restore).
+	BackupDir string
+	// KeepBackups caps retained snapshots; <= 0 keeps all.
+	KeepBackups int
+	// Clock is injectable for deterministic snapshot IDs in tests; nil uses
+	// the wall clock.
+	Clock func() time.Time
+}
+
+func (e *Engine) now() time.Time {
+	if e.Clock != nil {
+		return e.Clock()
+	}
+	return time.Now()
 }
 
 // Op is the action Apply would take for one target file.
@@ -61,6 +77,11 @@ type Item struct {
 	// IsDir is set on OpDelete items whose AbsPath is a whole directory
 	// (e.g. a skill's skills/<id>/ folder) rather than a single file.
 	IsDir bool
+	// Conflict is true when writing Desired would clobber a whole-file
+	// (MergeReplace) target loadout has never installed — or can no longer
+	// prove it owns the current content of. Such items are skipped unless the
+	// plan's OverwriteConflicts is set. See spec 004.
+	Conflict bool
 }
 
 // Skip records an agent the plan left out entirely.
@@ -79,15 +100,53 @@ type Plan struct {
 	Items         []Item
 	Skips         []Skip
 	NotApplicable []NotApplicable
+	// OverwriteConflicts, when set by the caller after showing the plan,
+	// promotes conflicting items into Changes so Apply writes them. It is a
+	// per-run opt-in ("--force") and is never persisted.
+	OverwriteConflicts bool
 }
 
-// Changes returns the items Apply would write.
+// Changes returns the items Apply would write: every non-noop item, minus
+// conflicts that were skipped this run (unless OverwriteConflicts is set).
 func (p *Plan) Changes() []Item {
 	var out []Item
 	for _, it := range p.Items {
-		if it.Op != OpNoop {
+		if it.Op == OpNoop {
+			continue
+		}
+		if it.Conflict && !p.OverwriteConflicts {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+// Conflicts returns the items Apply would refuse to write because they would
+// clobber a file loadout never installed (or can't prove it owns). They become
+// Changes only when OverwriteConflicts is set.
+func (p *Plan) Conflicts() []Item {
+	var out []Item
+	for _, it := range p.Items {
+		if it.Conflict {
 			out = append(out, it)
 		}
+	}
+	return out
+}
+
+// stateItems returns the items whose install state Apply should record:
+// everything except conflicts that were skipped this run. Recording a skipped
+// conflict would make the next plan see it as loadout-installed (drifted-local)
+// and silently overwrite it on the second sync — the exact regression this
+// feature exists to prevent. See spec 004.
+func (p *Plan) stateItems() []Item {
+	var out []Item
+	for _, it := range p.Items {
+		if it.Conflict && !p.OverwriteConflicts {
+			continue
+		}
+		out = append(out, it)
 	}
 	return out
 }
@@ -203,7 +262,7 @@ func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifac
 		op = OpUpdate
 	}
 
-	return Item{
+	it := Item{
 		Agent:     agent,
 		Artifact:  art,
 		RelPath:   tf.RelPath,
@@ -216,7 +275,12 @@ func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifac
 		Desired:   desired,
 		Op:        op,
 		StateHash: st.get(art.ID, string(agent), tf.RelPath),
-	}, nil
+	}
+	// A whole-file target that already exists but loadout can't prove it owns
+	// (never installed, or both store and disk moved since install) is a
+	// conflict: overwriting it would silently destroy user content.
+	it.Conflict = op != OpNoop && tf.Merge == adapter.MergeReplace && classify(it) == domain.StateConflict
+	return it, nil
 }
 
 // Apply writes every non-noop item, then records install state. The confirm
@@ -228,6 +292,18 @@ func (e *Engine) Apply(ctx context.Context, p *Plan, confirm func(*Plan) bool) (
 	}
 	if confirm == nil || !confirm(p) {
 		return 0, ErrNotConfirmed
+	}
+
+	// Snapshot everything about to be overwritten BEFORE the first write, so a
+	// clobber is always recoverable. Fail closed: a safety feature that fails
+	// silently is worse than an aborted apply.
+	if e.BackupDir != "" {
+		if _, err := takeSnapshot(e.BackupDir, "sync", changes, e.now()); err != nil {
+			return 0, fmt.Errorf("snapshot before apply: %w", err)
+		}
+		if err := pruneSnapshots(e.BackupDir, e.KeepBackups); err != nil {
+			return 0, err
+		}
 	}
 
 	for _, it := range changes {
@@ -247,7 +323,7 @@ func (e *Engine) Apply(ctx context.Context, p *Plan, confirm func(*Plan) bool) (
 	if err != nil {
 		return 0, err
 	}
-	for key, files := range groupFragments(p.Items) {
+	for key, files := range groupFragments(p.stateItems()) {
 		st.setGroup(key.artifact, key.agent, files)
 	}
 	if err := st.save(e.StatePath); err != nil {

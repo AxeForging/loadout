@@ -371,6 +371,160 @@ func TestOrphanedState_ReportsRecordsForRemovedArtifacts(t *testing.T) {
 	}
 }
 
+// writeUserFile creates a file under the fake agent home the user "already
+// had" before loadout ever ran, so its target collides with a store artifact.
+func (env *testEnv) writeUserFile(t *testing.T, rel, content string) string {
+	t.Helper()
+	abs := filepath.Join(env.home, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
+func TestPlan_MarksPreexistingNeverInstalledFileAsConflict(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "plan")
+	env.writeUserFile(t, "skills/plan/SKILL.md", "my own plan skill\n")
+
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflicts := plan.Conflicts()
+	if len(conflicts) != 1 || conflicts[0].RelPath != "skills/plan/SKILL.md" {
+		t.Fatalf("Conflicts() = %v, want the pre-existing plan skill", conflicts)
+	}
+	if !conflicts[0].Conflict {
+		t.Error("item not flagged Conflict")
+	}
+}
+
+func TestChanges_ExcludesConflictsUnlessOverwriteOptIn(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "plan")
+	env.writeUserFile(t, "skills/plan/SKILL.md", "my own plan skill\n")
+
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := plan.Changes(); len(got) != 0 {
+		t.Fatalf("Changes() = %v, want none while conflict is unresolved", got)
+	}
+	plan.OverwriteConflicts = true
+	if got := plan.Changes(); len(got) != 1 {
+		t.Fatalf("Changes() with OverwriteConflicts = %v, want the conflict promoted", got)
+	}
+}
+
+func TestApply_LeavesConflictingFileUntouchedByDefault(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "plan")
+	original := "my own plan skill\n"
+	abs := env.writeUserFile(t, "skills/plan/SKILL.md", original)
+
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := env.eng.Apply(context.Background(), plan, func(*Plan) bool { return true })
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if n != 0 {
+		t.Errorf("applied %d change(s), want 0", n)
+	}
+	raw, _ := os.ReadFile(abs)
+	if string(raw) != original {
+		t.Errorf("conflicting file was modified: %q", raw)
+	}
+}
+
+func TestApply_DoesNotRecordStateForSkippedConflicts(t *testing.T) {
+	// Regression guard: recording state for a skipped conflict would make the
+	// next plan see it as loadout-installed (drifted-local) and silently
+	// overwrite it on the second sync.
+	env := newTestEnv(t)
+	env.addSkill(t, "plan")
+	original := "my own plan skill\n"
+	abs := env.writeUserFile(t, "skills/plan/SKILL.md", original)
+
+	// First (default) sync skips the conflict.
+	env.applyAll(t)
+	if raw, _ := os.ReadFile(abs); string(raw) != original {
+		t.Fatalf("first sync clobbered the file: %q", raw)
+	}
+
+	// Second sync must STILL treat it as a conflict, not a drifted install.
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Conflicts()) != 1 {
+		t.Fatalf("second plan Conflicts() = %v, want the file still protected", plan.Conflicts())
+	}
+	if len(plan.Changes()) != 0 {
+		t.Fatalf("second plan Changes() = %v, want none", plan.Changes())
+	}
+	env.applyAll(t)
+	if raw, _ := os.ReadFile(abs); string(raw) != original {
+		t.Errorf("second sync silently overwrote the file: %q", raw)
+	}
+}
+
+func TestApply_OverwritesConflictWhenForced(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "plan")
+	abs := env.writeUserFile(t, "skills/plan/SKILL.md", "my own plan skill\n")
+
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.OverwriteConflicts = true
+	n, err := env.eng.Apply(context.Background(), plan, func(*Plan) bool { return true })
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if n != 1 {
+		t.Errorf("applied %d change(s), want 1", n)
+	}
+	if raw, _ := os.ReadFile(abs); string(raw) == "my own plan skill\n" {
+		t.Error("forced apply did not overwrite the file")
+	}
+	// After a forced overwrite the file is loadout-managed: a fresh plan is a noop.
+	if got := env.statusOf(t, "plan"); got != domain.StateInSync {
+		t.Errorf("status after forced overwrite = %s, want in-sync", got)
+	}
+}
+
+func TestPlan_LocallyDriftedInstallIsNotBlocked(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "review")
+	env.applyAll(t)
+
+	// User edits a file loadout provably installed — this is drift, not a
+	// conflict, so re-converging must not require --force.
+	installed := filepath.Join(env.home, "skills", "review", "SKILL.md")
+	if err := os.WriteFile(installed, []byte("hand edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := env.eng.Plan(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Conflicts()) != 0 {
+		t.Errorf("locally-drifted install flagged as conflict: %v", plan.Conflicts())
+	}
+	if len(plan.Changes()) != 1 {
+		t.Errorf("Changes() = %v, want the drift re-converged without --force", plan.Changes())
+	}
+}
+
 func TestPlan_FilterLimitsArtifacts(t *testing.T) {
 	env := newTestEnv(t)
 	env.addSkill(t, "one")

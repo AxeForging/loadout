@@ -12,6 +12,7 @@ export type Overview = {
   store: { name: string; root: string; artifacts: number };
   agents: Agent[];
   pending: number;
+  conflicts: number;
   states: Record<string, number>;
 };
 
@@ -39,7 +40,7 @@ export type Artifact = {
 export type ArtifactDetail = { artifact: Artifact; files: Record<string, string> };
 
 export type Change = { op: string; agent: string; artifact: string; relPath: string };
-export type SyncPlan = { token: string; changes: Change[] };
+export type SyncPlan = { token: string; changes: Change[]; conflicts: Change[] };
 
 export type Diff = { agent: string; artifact: string; relPath: string; diff: string };
 
@@ -69,6 +70,7 @@ export type BundleImportPlan = {
   conflicts: Artifact[];
   identical: string[];
   sources: Source[];
+  warnings: string[];
 };
 export type BundleImportResult = { applied: string[]; sourcesAdded: number };
 
@@ -136,10 +138,10 @@ export const api = {
     return request<Diff[]>(`/api/diff?${q}`);
   },
   syncPlan: () => request<SyncPlan>("/api/sync/plan", { method: "POST", body: "{}" }),
-  syncApply: (token: string) =>
+  syncApply: (token: string, overwriteConflicts = false) =>
     request<{ applied: number }>("/api/sync/apply", {
       method: "POST",
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, overwriteConflicts }),
     }),
   sources: () => request<Source[]>("/api/sources"),
   sourcesAdd: (input: { name?: string; url: string; ref?: string; subdir?: string }) =>
@@ -148,7 +150,7 @@ export const api = {
   wizardSchema: () => request<WizardSection[]>("/api/wizard/schema"),
   wizardPresets: () => request<string[]>("/api/wizard/presets"),
   wizardPlan: (answers: Answers, preset?: string) =>
-    request<{ create: string[]; skip: string[] }>("/api/wizard/plan", {
+    request<{ create: string[]; skip: string[]; warnings: string[] }>("/api/wizard/plan", {
       method: "POST",
       body: JSON.stringify({ answers, preset }),
     }),
