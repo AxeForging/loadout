@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/goccy/go-yaml"
 )
@@ -54,4 +55,29 @@ func (s state) setGroup(artifact, agent string, files map[string]string) {
 		s.Artifacts[artifact] = map[string]map[string]string{}
 	}
 	s.Artifacts[artifact][agent] = files
+}
+
+// removeGroup drops the install record for one artifact × agent entirely,
+// pruning the artifact's top-level entry too once it has no agents left.
+func (s state) removeGroup(artifact, agent string) {
+	if s.Artifacts[artifact] == nil {
+		return
+	}
+	delete(s.Artifacts[artifact], agent)
+	if len(s.Artifacts[artifact]) == 0 {
+		delete(s.Artifacts, artifact)
+	}
+}
+
+// artifactIDs returns the sorted, deduplicated artifact IDs that have at
+// least one install record for any agent.
+func (s state) artifactIDs() []string {
+	out := make([]string, 0, len(s.Artifacts))
+	for id, agents := range s.Artifacts {
+		if len(agents) > 0 {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

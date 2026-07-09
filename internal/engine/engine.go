@@ -35,6 +35,9 @@ const (
 	OpNoop   Op = "noop"
 	OpCreate Op = "create"
 	OpUpdate Op = "update"
+	// OpDelete removes AbsPath entirely: os.RemoveAll if Item.IsDir, else
+	// os.Remove. Only ever produced by PlanRemoval, never by Plan.
+	OpDelete Op = "delete"
 )
 
 // Item is one target file of one artifact on one agent.
@@ -55,6 +58,9 @@ type Item struct {
 	Op      Op
 	// StateHash is the fragment hash recorded at last install ("" = never).
 	StateHash string
+	// IsDir is set on OpDelete items whose AbsPath is a whole directory
+	// (e.g. a skill's skills/<id>/ folder) rather than a single file.
+	IsDir bool
 }
 
 // Skip records an agent the plan left out entirely.
@@ -248,6 +254,20 @@ func (e *Engine) Apply(ctx context.Context, p *Plan, confirm func(*Plan) bool) (
 		return 0, fmt.Errorf("save state: %w", err)
 	}
 	return len(changes), nil
+}
+
+// InstalledArtifactIDs returns the artifact IDs state.yaml currently has an
+// install record for (any agent). This is the real "previously active set"
+// a loadout switch diffs against — deliberately derived from actual
+// installed state rather than a remembered "which loadout was active" name,
+// so switching stays correct even if the machine drifted (manual syncs,
+// crashes, hand edits) since the last switch.
+func (e *Engine) InstalledArtifactIDs() ([]string, error) {
+	st, err := loadState(e.StatePath)
+	if err != nil {
+		return nil, fmt.Errorf("load state: %w", err)
+	}
+	return st.artifactIDs(), nil
 }
 
 type groupKey struct{ artifact, agent string }

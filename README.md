@@ -61,6 +61,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`) |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
+| `loadout loadouts save\|list\|show\|switch\|rm` | Named, switchable sets of active artifacts — `switch` installs the set and removes whatever isn't in it (always asks before writing) |
 | `loadout tui` (alias `dash`) | Interactive dashboard: drift matrix, store browser with preview, sources, diff view, gated sync |
 | `loadout serve` | Local web UI on `127.0.0.1:4600` — overview, store browser, drift matrix with diffs, sources, the Builder, bundle export/import |
 | `loadout agents` | List supported agents and whether they are installed |
@@ -168,6 +169,22 @@ loadout profile rm acme-backend                                     # delete it
 ```
 
 Profiles live at `store/profiles/<name>.yaml` — plain YAML in the canonical store, so they travel with it through git or a bundle. The web Builder has the same picker next to the preset chips, plus a "Save as profile" action on the review step. (Profiles save a whole answer set; the instruction library above saves individual custom-instruction lines — the two are independent and can be used together.)
+
+## Loadouts — switch your active artifact set
+
+A profile saves wizard *answers*; a **loadout** saves the *artifact set itself* — which skills, instructions, commands, hooks and settings are actually active. `loadout loadouts switch <name>` is a real switch: it installs everything the target loadout has, and **removes** whatever was previously installed but isn't in it — not just an additive sync.
+
+```bash
+loadout loadouts save frontend demo style   # save named artifacts as a loadout
+loadout loadouts list                       # see what's saved (marks the active one)
+loadout loadouts show frontend              # print its artifact list
+loadout loadouts switch frontend            # install it, remove what's not in it — asks first
+loadout loadouts rm frontend                # delete the definition only, never installed artifacts
+```
+
+The first time you touch the feature, loadout auto-saves a `default` loadout — a frozen snapshot of everything that was in the manifest at that moment — as a safety net you never have to think to create. `default` can never be saved over or removed, so `loadout loadouts switch default` is always there as a way back. `rm` only ever deletes a saved loadout's *definition*; real removal from agent homes only happens through `switch`, which always shows a plan and asks before writing.
+
+One thing v1 doesn't remove automatically: hooks and settings fragments merged into `settings.json` (multiple artifacts can share that file, so there's no safe way yet to subtract just one artifact's contribution). Switching away from a loadout with hooks/settings leaves those files as-is and just stops tracking them — `loadout status`/`doctor` will flag them as installed-but-unmanaged if you want to clean them up by hand.
 
 ## Context handoff — continue anywhere
 

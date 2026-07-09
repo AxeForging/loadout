@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -91,5 +92,100 @@ func TestCheckBlocks_ReportsUnbalancedAndDuplicateMarkers(t *testing.T) {
 func TestExtractBlock_ReturnsNilWhenAbsent(t *testing.T) {
 	if got := ExtractBlock([]byte("nothing here"), "style"); got != nil {
 		t.Errorf("ExtractBlock() = %q, want nil", got)
+	}
+}
+
+func TestRemoveBlock_PreservesContentOutsideMarkers(t *testing.T) {
+	doc, _ := UpsertBlock([]byte("before\n"), WrapBlock("style", []byte("content")))
+	doc = append(doc, []byte("after\n")...)
+
+	out, found, err := RemoveBlock(doc, "style")
+	if err != nil {
+		t.Fatalf("RemoveBlock() error = %v", err)
+	}
+	if !found {
+		t.Fatal("RemoveBlock() found = false, want true")
+	}
+	s := string(out)
+	if !strings.HasPrefix(s, "before") {
+		t.Errorf("content before the block not preserved:\n%s", s)
+	}
+	if !strings.HasSuffix(s, "after\n") {
+		t.Errorf("content after the block not preserved:\n%s", s)
+	}
+	if strings.Contains(s, "loadout:begin style") || strings.Contains(s, "content") {
+		t.Errorf("block not removed:\n%s", s)
+	}
+}
+
+func TestRemoveBlock_NoDoubleBlankLineLeftBehind(t *testing.T) {
+	doc, _ := UpsertBlock([]byte("before\n"), WrapBlock("style", []byte("content")))
+	doc = append(doc, []byte("\nafter\n")...)
+
+	out, _, err := RemoveBlock(doc, "style")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "\n\n\n") {
+		t.Errorf("triple newline (double blank line) left behind:\n%q", out)
+	}
+	want := "before\n\nafter\n"
+	if string(out) != want {
+		t.Errorf("RemoveBlock() = %q, want %q", out, want)
+	}
+}
+
+func TestRemoveBlock_MissingBlockIsNoop(t *testing.T) {
+	doc := []byte("nothing to see here\n")
+	out, found, err := RemoveBlock(doc, "style")
+	if err != nil {
+		t.Fatalf("RemoveBlock() error = %v", err)
+	}
+	if found {
+		t.Error("RemoveBlock() found = true for an absent block")
+	}
+	if !bytes.Equal(out, doc) {
+		t.Errorf("RemoveBlock() on a missing block = %q, want byte-identical %q", out, doc)
+	}
+}
+
+func TestRemoveBlock_ErrorsOnUnterminatedBlock(t *testing.T) {
+	doc := []byte("<!-- loadout:begin style -->\nbroken\n")
+	if _, _, err := RemoveBlock(doc, "style"); err == nil {
+		t.Fatal("expected error for missing end marker")
+	}
+}
+
+func TestRemoveBlock_WholeFileWasJustTheBlock_ResultIsEmpty(t *testing.T) {
+	doc, _ := UpsertBlock(nil, WrapBlock("style", []byte("content")))
+	out, found, err := RemoveBlock(doc, "style")
+	if err != nil {
+		t.Fatalf("RemoveBlock() error = %v", err)
+	}
+	if !found {
+		t.Fatal("RemoveBlock() found = false, want true")
+	}
+	if len(out) != 0 {
+		t.Errorf("RemoveBlock() = %q, want empty", out)
+	}
+}
+
+func TestRemoveBlock_KeepsOtherBlocksIntact(t *testing.T) {
+	doc, _ := UpsertBlock(nil, WrapBlock("one", []byte("first")))
+	doc, _ = UpsertBlock(doc, WrapBlock("two", []byte("second")))
+
+	out, found, err := RemoveBlock(doc, "one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("RemoveBlock() found = false, want true")
+	}
+	s := string(out)
+	if strings.Contains(s, "first") || strings.Contains(s, "loadout:begin one") {
+		t.Errorf("removed block still present:\n%s", s)
+	}
+	if !strings.Contains(s, "second") || !strings.Contains(s, "loadout:begin two") {
+		t.Errorf("sibling block lost:\n%s", s)
 	}
 }
