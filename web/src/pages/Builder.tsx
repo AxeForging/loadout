@@ -229,7 +229,11 @@ function Question({
   }, [q.type, current]);
 
   return (
-    <fieldset>
+    // min-w-0 overrides fieldset's browser-default intrinsic min-width
+    // (fieldsets ignore min-w-0 on children unless set here too), so long
+    // unbroken content inside — a custom-instruction row, e.g. — wraps
+    // instead of forcing the whole page into horizontal scroll.
+    <fieldset className="min-w-0">
       <legend className="text-sm font-medium text-ink">{q.prompt}</legend>
       <div className="mt-3">
         {q.type === "bool" ? (
