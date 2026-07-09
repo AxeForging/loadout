@@ -57,7 +57,21 @@ func newEngine(cmd *cli.Command) (*engine.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &engine.Engine{Store: s, Registry: newRegistry(), StatePath: statePath}, nil
+	backupDir, err := config.BackupsDir()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	return &engine.Engine{
+		Store:       s,
+		Registry:    newRegistry(),
+		StatePath:   statePath,
+		BackupDir:   backupDir,
+		KeepBackups: cfg.BackupsKeep(),
+	}, nil
 }
 
 // filterFromFlags builds an engine filter from --agent flags and positional
@@ -85,10 +99,28 @@ func printSkips(p *engine.Plan) {
 	}
 }
 
-// printChanges lists what Apply would write.
+// printChanges lists what Apply would write, plus any conflicting files it
+// would refuse to overwrite (or, with --force, overwrite after snapshotting).
 func printChanges(p *engine.Plan) {
 	for _, it := range p.Changes() {
+		if it.Conflict { // only present when OverwriteConflicts is set
+			fmt.Printf("  ! force  %s: %s  (%s) — overwrites a file loadout never installed (snapshotted first)\n", it.Agent, it.RelPath, it.Artifact.ID)
+			continue
+		}
 		fmt.Printf("  %-6s %s: %s  (%s)\n", it.Op, it.Agent, it.RelPath, it.Artifact.ID)
+	}
+	if !p.OverwriteConflicts {
+		for _, it := range p.Conflicts() {
+			fmt.Printf("  ! skip   %s: %s  (%s) — exists on disk, never installed by loadout\n", it.Agent, it.RelPath, it.Artifact.ID)
+		}
+	}
+}
+
+// forceFlag opts into overwriting files loadout has never installed.
+func forceFlag() cli.Flag {
+	return &cli.BoolFlag{
+		Name:  "force",
+		Usage: "Overwrite conflicting files loadout never installed (a snapshot is taken first)",
 	}
 }
 

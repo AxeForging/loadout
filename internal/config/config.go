@@ -22,6 +22,24 @@ type Config struct {
 		CheckOnRun    bool `yaml:"checkOnRun,omitempty"`
 		IntervalHours int  `yaml:"intervalHours,omitempty"`
 	} `yaml:"updates,omitempty"`
+	Backups struct {
+		// Keep caps how many pre-write snapshots are retained; 0 uses the
+		// default (DefaultBackupsKeep).
+		Keep int `yaml:"keep,omitempty"`
+	} `yaml:"backups,omitempty"`
+}
+
+// DefaultBackupsKeep is how many snapshots loadout retains when the user has
+// not configured backups.keep.
+const DefaultBackupsKeep = 10
+
+// BackupsKeep resolves the retention count, applying the default for an unset
+// (zero) value. A negative value means "keep all" (no pruning).
+func (c Config) BackupsKeep() int {
+	if c.Backups.Keep == 0 {
+		return DefaultBackupsKeep
+	}
+	return c.Backups.Keep
 }
 
 // Dir returns loadout's config directory.
@@ -91,6 +109,15 @@ func StatePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(data, "state.yaml"), nil
+}
+
+// BackupsDir is the machine-local directory holding pre-write snapshots.
+func BackupsDir() (string, error) {
+	data, err := DataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(data, "backups"), nil
 }
 
 // ResolveStore picks the store path: flag > config > default.

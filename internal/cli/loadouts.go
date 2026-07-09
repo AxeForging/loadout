@@ -99,6 +99,7 @@ func loadoutsCmd() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "dry-run", Usage: "Show the plan and exit without writing"},
 					&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Apply without the interactive confirmation prompt"},
+					forceFlag(),
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					name := cmd.Args().First()
@@ -175,6 +176,7 @@ func runLoadoutSwitch(ctx context.Context, cmd *cli.Command, eng *engine.Engine,
 			return err
 		}
 	}
+	installPlan.OverwriteConflicts = cmd.Bool("force")
 
 	installedIDs, err := eng.InstalledArtifactIDs()
 	if err != nil {
@@ -200,6 +202,11 @@ func runLoadoutSwitch(ctx context.Context, cmd *cli.Command, eng *engine.Engine,
 	printRemovals(removalPlan)
 
 	if len(installPlan.Changes()) == 0 && len(removalPlan.Items) == 0 {
+		if c := installPlan.Conflicts(); len(c) > 0 && !installPlan.OverwriteConflicts {
+			fmt.Printf("\n%d conflicting file(s) exist on disk but were never installed by loadout — skipped.\n"+
+				"Re-run with --force to overwrite them (a snapshot is taken first).\n", len(c))
+			return nil
+		}
 		fmt.Printf("Already on loadout %q — nothing to do.\n", name)
 		return nil
 	}

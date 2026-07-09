@@ -90,6 +90,30 @@ func TestExportImport_ArchiveRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPlanImport_WarnsOnReservedArtifactNames(t *testing.T) {
+	src := testStore(t, "team-kit")
+	if _, err := src.New(domain.KindCommand, "plan"); err != nil { // shadows /plan
+		t.Fatal(err)
+	}
+	if _, err := src.New(domain.KindSkill, "linting"); err != nil { // safe name
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "exported")
+	if _, err := Export(src, dest, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := testStore(t, "mine")
+	plan, err := PlanImport(fresh, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], "plan") {
+		t.Fatalf("Warnings = %v, want exactly one mentioning plan", plan.Warnings)
+	}
+}
+
 func TestImport_ConflictSkippedByDefaultOverwrittenOnRequest(t *testing.T) {
 	src := testStore(t, "team-kit")
 	if _, err := src.New(domain.KindSkill, "review"); err != nil {

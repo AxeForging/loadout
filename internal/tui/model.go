@@ -232,8 +232,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.openDiff()
 		}
 	case "s":
-		if (m.tab == tabAgents || m.tab == tabOverview) && m.plan != nil && len(m.plan.Changes()) > 0 {
-			m.mode = modeConfirm
+		if (m.tab == tabAgents || m.tab == tabOverview) && m.plan != nil {
+			if c := len(m.plan.Conflicts()); c > 0 {
+				m.log("%d conflicting file(s) skipped — never installed by loadout; run 'loadout sync --force' to overwrite (snapshotted first)", c)
+			}
+			if len(m.plan.Changes()) > 0 {
+				m.mode = modeConfirm
+			}
 		}
 	case "c":
 		if m.tab == tabSources && m.deps.Sources != nil && !m.checking {

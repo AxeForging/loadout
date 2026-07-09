@@ -74,9 +74,9 @@ export function BundleImport() {
         Import a bundle
       </p>
       <p className="mt-2 text-sm leading-relaxed text-ink-dim">
-        Received a <code className="font-mono text-xs text-ink">.loadout.tar.gz</code> or a single
-        YAML export from a teammate? Upload the file or paste the YAML here to review and merge it
-        into this store.
+        Received a <code className="font-mono text-xs text-ink">.loadout.tar.gz</code> or a{" "}
+        <code className="font-mono text-xs text-ink">.loadout.yaml</code> export from a teammate?
+        Upload the file or paste the YAML here to review and merge it into this store.
       </p>
 
       {result ? (
@@ -134,6 +134,14 @@ export function BundleImport() {
               = {plan.identical.length} artifact{plan.identical.length === 1 ? "" : "s"} identical,
               nothing to do
             </p>
+          ) : null}
+
+          {plan.warnings.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-xs text-warn">
+              {plan.warnings.map((w, i) => (
+                <li key={`warn-${i}`}>! {w}</li>
+              ))}
+            </ul>
           ) : null}
 
           {plan.conflicts.length > 0 ? (
@@ -194,11 +202,11 @@ export function BundleImport() {
                 <span aria-hidden className="font-mono text-ember">
                   ↑
                 </span>
-                {fileName ?? "Choose bundle…"}
+                {fileName ?? "Choose bundle or YAML…"}
                 <input
                   ref={fileInput}
                   type="file"
-                  accept=".tar.gz,.tgz,application/gzip"
+                  accept=".tar.gz,.tgz,.yaml,.yml,application/gzip"
                   className="hidden"
                   onChange={onFileChosen}
                 />

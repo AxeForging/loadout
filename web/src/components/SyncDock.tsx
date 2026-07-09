@@ -10,6 +10,7 @@ export function SyncDock() {
   const queryClient = useQueryClient();
   const [plan, setPlan] = useState<SyncPlan | null>(null);
   const [applied, setApplied] = useState<number | null>(null);
+  const [overwrite, setOverwrite] = useState(false);
 
   const overview = useQuery({ queryKey: ["overview"], queryFn: api.overview });
 
@@ -18,10 +19,12 @@ export function SyncDock() {
     onSuccess: (p) => {
       setPlan(p);
       setApplied(null);
+      setOverwrite(false);
     },
   });
   const applyMutation = useMutation({
-    mutationFn: (token: string) => api.syncApply(token),
+    mutationFn: ({ token, overwriteConflicts }: { token: string; overwriteConflicts: boolean }) =>
+      api.syncApply(token, overwriteConflicts),
     onSuccess: (res) => {
       setApplied(res.applied);
       setPlan(null);
@@ -30,7 +33,11 @@ export function SyncDock() {
   });
 
   const pending = overview.data?.pending ?? 0;
-  if (pending === 0 && !plan && applied === null) return null;
+  const pendingConflicts = overview.data?.conflicts ?? 0;
+  if (pending === 0 && pendingConflicts === 0 && !plan && applied === null) return null;
+
+  const conflicts = plan?.conflicts ?? [];
+  const applyCount = (plan?.changes.length ?? 0) + (overwrite ? conflicts.length : 0);
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-10">
@@ -76,14 +83,43 @@ export function SyncDock() {
                     <span className="text-ink-faint">{c.artifact}</span>
                   </li>
                 ))}
+                {conflicts.map((c, i) => (
+                  <li
+                    key={`conflict-${i}`}
+                    className="rise flex items-center gap-3 font-mono text-xs"
+                    style={{ "--i": Math.min(plan.changes.length + i, 10) } as CSSProperties}
+                  >
+                    <span className="w-16 whitespace-nowrap text-danger">
+                      {overwrite ? "! force" : "! skip"}
+                    </span>
+                    <span className="text-ink-dim">{c.agent}</span>
+                    <span className="min-w-0 flex-1 truncate text-ink">{c.relPath}</span>
+                    <span className="text-ink-faint">{c.artifact}</span>
+                  </li>
+                ))}
               </ul>
+              {conflicts.length > 0 ? (
+                <label className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-xs text-ink-dim">
+                  <input
+                    type="checkbox"
+                    checked={overwrite}
+                    onChange={(e) => setOverwrite(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Also overwrite {conflicts.length} conflicting file
+                    {conflicts.length === 1 ? "" : "s"} loadout never installed. A snapshot is taken
+                    first, so this stays recoverable via <span className="font-mono">loadout restore</span>.
+                  </span>
+                </label>
+              ) : null}
               <div className="mt-4 flex items-center gap-3 border-t border-line pt-3">
                 <button
-                  onClick={() => applyMutation.mutate(plan.token)}
-                  disabled={applyMutation.isPending}
+                  onClick={() => applyMutation.mutate({ token: plan.token, overwriteConflicts: overwrite })}
+                  disabled={applyMutation.isPending || applyCount === 0}
                   className="btn-ember"
                 >
-                  {applyMutation.isPending ? "Applying…" : `Apply ${plan.changes.length}`}
+                  {applyMutation.isPending ? "Applying…" : `Apply ${applyCount}`}
                 </button>
                 <button
                   onClick={() => setPlan(null)}
@@ -100,8 +136,17 @@ export function SyncDock() {
             <div className="flex items-center justify-between px-5 py-3">
               <p className="text-sm text-ink-dim">
                 <span aria-hidden className="ember-pulse mr-2.5 inline-block h-2 w-2 bg-ember align-baseline" />
-                <span className="tnum font-medium text-ink">{pending}</span> pending change
-                {pending === 1 ? "" : "s"} across your agents
+                {pending > 0 ? (
+                  <>
+                    <span className="tnum font-medium text-ink">{pending}</span> pending change
+                    {pending === 1 ? "" : "s"} across your agents
+                  </>
+                ) : (
+                  <>
+                    <span className="tnum font-medium text-ink">{pendingConflicts}</span> conflicting
+                    file{pendingConflicts === 1 ? "" : "s"} — never installed by loadout
+                  </>
+                )}
               </p>
               <button
                 onClick={() => planMutation.mutate()}

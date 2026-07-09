@@ -25,6 +25,7 @@ func syncCmd() *cli.Command {
 				Aliases: []string{"y"},
 				Usage:   "Apply without the interactive confirmation prompt",
 			},
+			forceFlag(),
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			eng, err := newEngine(cmd)
@@ -42,9 +43,16 @@ func runSync(ctx context.Context, cmd *cli.Command, eng *engine.Engine, f engine
 	if err != nil {
 		return err
 	}
+	plan.OverwriteConflicts = cmd.Bool("force")
 	printSkips(plan)
 	changes := plan.Changes()
 	if len(changes) == 0 {
+		if c := plan.Conflicts(); len(c) > 0 && !plan.OverwriteConflicts {
+			printChanges(plan)
+			fmt.Printf("\n%d conflicting file(s) exist on disk but were never installed by loadout — skipped.\n"+
+				"Re-run with --force to overwrite them (a snapshot is taken first).\n", len(c))
+			return nil
+		}
 		fmt.Println("Everything in sync — nothing to do.")
 		return nil
 	}

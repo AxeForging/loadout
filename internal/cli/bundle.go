@@ -213,6 +213,9 @@ func bundleCmd() *cli.Command {
 					if len(plan.Identical) > 0 {
 						fmt.Printf("  = %d artifact(s) identical, nothing to do\n", len(plan.Identical))
 					}
+					for _, w := range plan.Warnings {
+						fmt.Printf("  ! %s\n", w)
+					}
 					if plan.Changes(overwrite) == 0 {
 						fmt.Println("Nothing to import.")
 						return nil

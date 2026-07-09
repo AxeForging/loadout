@@ -50,8 +50,9 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout init` | Create the canonical store (git-friendly directory with a starter manifest) |
 | `loadout status [artifact...]` | Drift matrix: every artifact's sync state per agent |
 | `loadout diff [artifact...]` | Unified diffs of what sync would change |
-| `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`) |
-| `loadout install <agent>` | First-time full install into one agent |
+| `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`, `--force`) |
+| `loadout install <agent>` | First-time full install into one agent (`--force`) |
+| `loadout restore [snapshot-id]` | List pre-write snapshots, or restore one (`--yes`) — recover files an overwrite replaced |
 | `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command` or `hook` — or draft a skill with `--ai "description"` via your logged-in agent |
 | `loadout add <path>` | Adopt an existing native artifact (skill/hook dir, command/instruction file) into the store |
 | `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
@@ -59,7 +60,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
 | `loadout bundle export [--archive\|--flat]` | Export the store as a shareable directory, `.loadout.tar.gz`, or a single self-contained `.loadout.yaml` document (`--flat`) — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
 | `loadout bundle import <path>` | Validate a bundle (directory, `.tar.gz`, or flat YAML — auto-detected), show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
-| `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`) |
+| `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`). Set an optional namespace prefix so generated commands become `/af-plan`, `/af-spec`, … instead of clashing with agent built-ins like `/plan` |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
 | `loadout loadouts save\|list\|show\|switch\|rm` | Named, switchable sets of active artifacts — `switch` installs the set and removes whatever isn't in it (always asks before writing) |
 | `loadout tui` (alias `dash`) | Interactive dashboard: drift matrix, store browser with preview, sources, diff view, gated sync |
@@ -110,6 +111,21 @@ Instructions render into agents' global instruction files (e.g. `~/.claude/CLAUD
 
 Everything outside the markers is preserved byte-for-byte. Hooks and settings fragments deep-merge into `settings.json` instead of replacing it.
 
+## Safety: conflicts and snapshots
+
+loadout will never silently destroy config you already had. Two guards protect a newcomer who imports someone else's bundle and syncs:
+
+- **Conflicts are skipped by default.** A whole-file artifact (skill, command, hook script) whose target already exists on disk but was *never installed by loadout* is reported as a `conflict` and left untouched. `sync` tells you what it skipped and stops there. Re-run with `--force` to overwrite them on purpose — for example when a store's `plan` command collides with a `~/.claude/commands/plan.md` you wrote yourself. Files loadout provably installed (`drifted-local`) still re-converge on a normal sync; only genuinely-unowned files need `--force`.
+
+- **A snapshot is taken before any overwrite or delete.** Right before `sync`, a loadout `switch`, or a `--force` write touches an existing file, loadout copies the originals into a timestamped snapshot under the machine-local data dir (`<data>/loadout/backups/<timestamp>/`). Recover them any time:
+
+  ```
+  loadout restore                 # list snapshots, newest first
+  loadout restore 20260709-150257 # restore that snapshot (asks first)
+  ```
+
+  Restores are themselves snapshotted, so they're undoable too. loadout keeps the most recent snapshots and prunes older ones — configure the count with `backups.keep` in `~/.config/loadout/config.yaml` (default 10; a negative value keeps all). Snapshots never touch install state, so `loadout status` stays honest after a restore.
+
 ## External sources
 
 Track skill repos (yours, your team's, public collections) and stay pinned:
@@ -147,6 +163,8 @@ updates:
 Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
 
 **Name the commands and skills yourself** — `/spec`, `/plan`, `/handoff`, `/resume` and the `sdd-workflow` skill each have a naming question (e.g. rename `sdd-workflow` to `fe-sdd-workflow` for a frontend-specific flow). Every generated cross-reference (the workflow skill mentioning `/plan`, the resume command's description, and so on) uses the name you chose — nothing is left pointing at the old one.
+
+**Namespace prefix** — the Naming station asks for an optional prefix (e.g. `af`) that's applied to every *defaulted* command/skill name at once: `/plan` → `/af-plan`, `/spec` → `/af-spec`, and so on. This keeps generated commands from clashing with agents' built-in slash commands like `/plan`. An explicit per-name rename always wins over the prefix. Whenever a generated (or scaffolded, or imported) command/skill name would shadow a built-in, loadout prints an advisory `!` warning — in the wizard, `loadout new`, `loadout bundle import`, and `loadout doctor` — but never blocks it: shadowing is allowed when you mean to.
 
 **Tell it how aggressively to change your codebase** — `sdd.changeScope` (minimal / balanced / thorough) becomes a "Change scope" section in the generated `sdd-workflow` skill: *minimal* scopes every change to the fewest files, insists on reusing existing code over duplicating it, and favors several small reviewable PRs; *thorough* allows broader changes when they clearly help; *balanced* (default) is the middle ground.
 
@@ -239,7 +257,7 @@ loadout bundle import config.yaml --yes   # same merge plan/apply path as any ot
 
 `bundle import` auto-detects the input shape (directory, `.tar.gz`, or flat YAML) from content, not the file extension, so there's no separate import command to remember.
 
-The web UI covers the same import flow: from the dashboard's "share" section, either upload a `.loadout.tar.gz` file or paste a flat YAML document directly into a textarea, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only. For picking exactly what to share instead of exporting everything, the dashboard's share section links to a dedicated **Export** page: chip-select artifacts (grouped by kind, with per-kind and select-all shortcuts), profiles, and library entries or whole groups, then either download a `.loadout.tar.gz` or render a copyable/downloadable flat YAML document.
+The web UI covers the same import flow: from the dashboard's "share" section, either upload a bundle file (`.loadout.tar.gz` **or** `.loadout.yaml`) or paste a flat YAML document directly into a textarea, review the plan (new / conflicting / identical artifacts, new sources, plus any reserved-name warnings), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only. For picking exactly what to share instead of exporting everything, the dashboard's share section links to a dedicated **Export** page: chip-select artifacts (grouped by kind, with per-kind and select-all shortcuts), profiles, and library entries or whole groups, then either download a `.loadout.tar.gz` or render a copyable/downloadable flat YAML document.
 
 ## Supported agents
 

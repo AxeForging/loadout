@@ -206,6 +206,62 @@ func TestAPI_TwoPhaseSyncGate(t *testing.T) {
 	}
 }
 
+func TestSyncApply_WritesConflictsOnlyWhenOverwriteRequested(t *testing.T) {
+	srv, home := newTestServer(t)
+	h := srv.Handler()
+
+	// The user already has their own skills/demo/SKILL.md that loadout never installed.
+	preexisting := filepath.Join(home, "skills", "demo", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(preexisting), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := "my own demo skill\n"
+	if err := os.WriteFile(preexisting, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plan surfaces it as a conflict, not a change.
+	_, out := doJSON(t, h, "POST", "/api/sync/plan", map[string]any{})
+	if len(out["changes"].([]any)) != 0 {
+		t.Fatalf("changes = %v, want none", out["changes"])
+	}
+	if len(out["conflicts"].([]any)) != 1 {
+		t.Fatalf("conflicts = %v, want 1", out["conflicts"])
+	}
+
+	// Apply WITHOUT overwrite leaves the file untouched.
+	token := out["token"].(string)
+	rec, out := doJSON(t, h, "POST", "/api/sync/apply", map[string]any{"token": token})
+	if rec.Code != http.StatusOK || out["applied"] != float64(0) {
+		t.Fatalf("apply = %d %v, want applied 0", rec.Code, out)
+	}
+	if raw, _ := os.ReadFile(preexisting); string(raw) != original {
+		t.Errorf("default apply modified the conflicting file: %q", raw)
+	}
+
+	// Re-plan, then apply WITH overwrite writes it.
+	_, out = doJSON(t, h, "POST", "/api/sync/plan", map[string]any{})
+	token = out["token"].(string)
+	rec, out = doJSON(t, h, "POST", "/api/sync/apply", map[string]any{"token": token, "overwriteConflicts": true})
+	if rec.Code != http.StatusOK || out["applied"] != float64(1) {
+		t.Fatalf("forced apply = %d %v, want applied 1", rec.Code, out)
+	}
+	if raw, _ := os.ReadFile(preexisting); string(raw) == original {
+		t.Error("forced apply did not overwrite the conflicting file")
+	}
+}
+
+func TestWizardPlan_ReturnsReservedNameWarnings(t *testing.T) {
+	srv, _ := newTestServer(t)
+	// sdd.enable produces a /plan command, which shadows Claude Code's built-in.
+	_, out := doJSON(t, srv.Handler(), "POST", "/api/wizard/plan",
+		map[string]any{"answers": map[string]any{"sdd.enable": true}})
+	warnings, ok := out["warnings"].([]any)
+	if !ok || len(warnings) == 0 {
+		t.Fatalf("warnings = %v, want a reserved-name warning for /plan", out["warnings"])
+	}
+}
+
 func TestAPI_ArtifactDetailReturnsFiles(t *testing.T) {
 	srv, _ := newTestServer(t)
 	rec, out := doJSON(t, srv.Handler(), "GET", "/api/artifacts/demo", nil)

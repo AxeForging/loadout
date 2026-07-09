@@ -54,6 +54,9 @@ func newCmd() *cli.Command {
 				return err
 			}
 			fmt.Printf("Created %s %q at %s\n", a.Kind, a.ID, filepath.Join(s.Root, a.Path))
+			if w := domain.ReservedNameWarning(a.Kind, a.ID); w != "" {
+				fmt.Printf("  ! %s\n", w)
+			}
 			fmt.Println("Edit it, then run 'loadout sync' to install it.")
 			return nil
 		},
@@ -104,6 +107,9 @@ func newAISkill(ctx context.Context, cmd *cli.Command, s storeWithSkills, name, 
 		return err
 	}
 	fmt.Printf("Created skill %q — review it, then 'loadout sync' to install.\n", a.ID)
+	if w := domain.ReservedNameWarning(a.Kind, a.ID); w != "" {
+		fmt.Printf("  ! %s\n", w)
+	}
 	return nil
 }
 

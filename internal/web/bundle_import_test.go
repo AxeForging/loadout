@@ -103,6 +103,39 @@ func TestAPI_BundleImportPlan_ValidBundleReturnsDiffWithoutWriting(t *testing.T)
 	}
 }
 
+func TestBundleImportPlan_AcceptsFlatYAMLViaMultipartUpload(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	// Build a single-file YAML bundle (not tar.gz) containing a reserved-name
+	// command, then upload it through the multipart file field — the backend
+	// content-sniffs, so the .tar.gz field name is irrelevant.
+	dir := t.TempDir()
+	src, err := store.Init(filepath.Join(dir, "src-store"), "team-kit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.New(domain.KindCommand, "plan"); err != nil {
+		t.Fatal(err)
+	}
+	yamlBytes, err := bundle.ExportFlat(src, "test", bundle.Selection{ArtifactIDs: []string{"plan"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec, out := doMultipartUpload(t, h, "/api/bundle/import/plan", "bundle", yamlBytes)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("flat YAML upload = %d: %s", rec.Code, rec.Body)
+	}
+	if len(out["new"].([]any)) != 1 {
+		t.Fatalf("new = %v, want the plan command", out["new"])
+	}
+	warnings := out["warnings"].([]any)
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %v, want one reserved-name warning", warnings)
+	}
+}
+
 func TestAPI_BundleImportPlan_RejectsNonGzipUpload(t *testing.T) {
 	srv, _ := newTestServer(t)
 	h := srv.Handler()

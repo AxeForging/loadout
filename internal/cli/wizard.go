@@ -104,6 +104,9 @@ func wizardCmd() *cli.Command {
 			for _, id := range skip {
 				fmt.Printf("  ~ %s exists — will be left untouched\n", id)
 			}
+			for _, w := range wizard.NameWarnings(answers) {
+				fmt.Printf("  ! %s\n", w)
+			}
 
 			if !cmd.Bool("yes") && !promptYes("Write these to the store?") {
 				fmt.Println("Aborted — nothing written.")

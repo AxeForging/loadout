@@ -223,6 +223,17 @@ func (e *Engine) ApplySwitch(ctx context.Context, install *Plan, removal *Remova
 		return 0, 0, ErrNotConfirmed
 	}
 
+	// Snapshot everything about to be overwritten or deleted before any write.
+	if e.BackupDir != "" {
+		both := append(append([]Item{}, instChanges...), remChanges...)
+		if _, err := takeSnapshot(e.BackupDir, "switch", both, e.now()); err != nil {
+			return 0, 0, fmt.Errorf("snapshot before switch: %w", err)
+		}
+		if err := pruneSnapshots(e.BackupDir, e.KeepBackups); err != nil {
+			return 0, 0, err
+		}
+	}
+
 	for _, it := range instChanges {
 		if err := writeItem(it); err != nil {
 			return 0, 0, err
@@ -249,7 +260,7 @@ func (e *Engine) ApplySwitch(ctx context.Context, install *Plan, removal *Remova
 	if err != nil {
 		return 0, 0, err
 	}
-	for key, files := range groupFragments(install.Items) {
+	for key, files := range groupFragments(install.stateItems()) {
 		st.setGroup(key.artifact, key.agent, files)
 	}
 	for _, k := range removal.ClearState {

@@ -189,9 +189,10 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			"root":      s.opts.Engine.Store.Root,
 			"artifacts": len(s.opts.Engine.Store.Manifest.Artifacts),
 		},
-		"agents":  s.agents(r.Context()),
-		"pending": len(plan.Changes()),
-		"states":  states,
+		"agents":    s.agents(r.Context()),
+		"pending":   len(plan.Changes()),
+		"conflicts": len(plan.Conflicts()),
+		"states":    states,
 	})
 }
 
@@ -311,12 +312,17 @@ func (s *Server) handleSyncPlan(w http.ResponseWriter, r *http.Request) {
 	for _, it := range plan.Changes() {
 		changes = append(changes, changeJSON{Op: string(it.Op), Agent: string(it.Agent), Artifact: it.Artifact.ID, RelPath: it.RelPath})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "changes": changes})
+	conflicts := make([]changeJSON, 0)
+	for _, it := range plan.Conflicts() {
+		conflicts = append(conflicts, changeJSON{Op: "conflict", Agent: string(it.Agent), Artifact: it.Artifact.ID, RelPath: it.RelPath})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "changes": changes, "conflicts": conflicts})
 }
 
 func (s *Server) handleSyncApply(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Token string `json:"token"`
+		Token              string `json:"token"`
+		OverwriteConflicts bool   `json:"overwriteConflicts"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/sync/plan first"))
@@ -331,7 +337,10 @@ func (s *Server) handleSyncApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The token round-trip IS the confirmation: the client showed the plan
-	// and the user explicitly applied it.
+	// and the user explicitly applied it. Overwriting files loadout never
+	// installed is a separate, explicit opt-in the client sets after seeing
+	// the conflicts.
+	pending.plan.OverwriteConflicts = req.OverwriteConflicts
 	n, err := s.opts.Engine.Apply(r.Context(), pending.plan, func(*engine.Plan) bool { return true })
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -605,7 +614,11 @@ func (s *Server) handleWizardPlan(w http.ResponseWriter, r *http.Request) {
 	if skip == nil {
 		skip = []string{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"create": create, "skip": skip})
+	warnings := wizard.NameWarnings(answers)
+	if warnings == nil {
+		warnings = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"create": create, "skip": skip, "warnings": warnings})
 }
 
 func (s *Server) handleWizardGenerate(w http.ResponseWriter, r *http.Request) {
@@ -808,6 +821,9 @@ func (s *Server) planBundleImport(w http.ResponseWriter, tempFile string) {
 	if plan.ConflictGroups == nil {
 		plan.ConflictGroups = []string{}
 	}
+	if plan.Warnings == nil {
+		plan.Warnings = []string{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":             token,
 		"meta":              plan.Meta,
@@ -820,6 +836,7 @@ func (s *Server) planBundleImport(w http.ResponseWriter, tempFile string) {
 		"newLibraryEntries": plan.NewLibraryEntries,
 		"newGroups":         plan.NewGroups,
 		"conflictGroups":    plan.ConflictGroups,
+		"warnings":          plan.Warnings,
 	})
 }
 

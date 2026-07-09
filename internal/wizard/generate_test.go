@@ -19,6 +19,80 @@ func testStore(t *testing.T) *store.Store {
 	return s
 }
 
+// specIDs returns the set of artifact IDs artifactSpecs emits for answers a.
+func specIDs(a Answers) map[string]bool {
+	ids := map[string]bool{}
+	for _, s := range artifactSpecs(a) {
+		ids[s.id] = true
+	}
+	return ids
+}
+
+func TestArtifactSpecs_PrefixesDefaultCommandAndSkillNames(t *testing.T) {
+	a := Answers{"sdd.enable": true, "continuity.handoff": true, "naming.prefix": "af"}
+	ids := specIDs(a)
+	for _, want := range []string{"af-plan", "af-spec", "af-handoff", "af-resume", "af-sdd-workflow"} {
+		if !ids[want] {
+			t.Errorf("missing prefixed artifact %q (got %v)", want, ids)
+		}
+	}
+	for _, unwanted := range []string{"plan", "spec", "handoff", "resume"} {
+		if ids[unwanted] {
+			t.Errorf("bare %q should have been prefixed", unwanted)
+		}
+	}
+}
+
+func TestArtifactSpecs_ExplicitRenameIgnoresPrefix(t *testing.T) {
+	a := Answers{"sdd.enable": true, "naming.prefix": "af", "sdd.planCommandName": "roadmap"}
+	ids := specIDs(a)
+	if !ids["roadmap"] {
+		t.Errorf("explicit rename should win verbatim, got %v", ids)
+	}
+	if ids["af-roadmap"] || ids["af-plan"] {
+		t.Errorf("prefix must not apply to an explicitly renamed command, got %v", ids)
+	}
+}
+
+func TestArtifactSpecs_InvalidPrefixIsIgnored(t *testing.T) {
+	a := Answers{"sdd.enable": true, "naming.prefix": "Not Valid!"}
+	ids := specIDs(a)
+	if !ids["plan"] || ids["Not Valid!-plan"] {
+		t.Errorf("invalid prefix should be ignored, leaving bare names, got %v", ids)
+	}
+}
+
+func TestNameWarnings_FlagsDefaultPlanCommand(t *testing.T) {
+	a := Answers{"sdd.enable": true}
+	warnings := NameWarnings(a)
+	if len(warnings) == 0 {
+		t.Fatal("default /plan command should produce a reserved-name warning")
+	}
+	joined := strings.Join(warnings, "\n")
+	if !strings.Contains(joined, "plan") {
+		t.Errorf("warnings should mention plan: %v", warnings)
+	}
+}
+
+func TestNameWarnings_EmptyWhenPrefixed(t *testing.T) {
+	a := Answers{"sdd.enable": true, "continuity.handoff": true, "naming.prefix": "af"}
+	if warnings := NameWarnings(a); len(warnings) != 0 {
+		t.Errorf("prefixed names should not warn, got %v", warnings)
+	}
+}
+
+func TestPresets_StillValidateWithNamingSection(t *testing.T) {
+	for _, name := range []string{"go-cli", "web-app"} {
+		a, err := LoadPreset(name)
+		if err != nil {
+			t.Fatalf("LoadPreset(%q) error = %v", name, err)
+		}
+		if _, err := a.validate(); err != nil {
+			t.Errorf("preset %q no longer validates after adding naming section: %v", name, err)
+		}
+	}
+}
+
 func TestGenerate_GoCliPresetProducesConventionArtifacts(t *testing.T) {
 	a, err := LoadPreset("go-cli")
 	if err != nil {
