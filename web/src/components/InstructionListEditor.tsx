@@ -15,6 +15,8 @@ export function InstructionListEditor({
   onChange: (v: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const queryClient = useQueryClient();
   const library = useQuery({ queryKey: ["library"], queryFn: api.libraryInstructions });
 
@@ -37,6 +39,29 @@ export function InstructionListEditor({
 
   function removeRow(index: number) {
     onChange(value.filter((_, i) => i !== index));
+    if (editingIndex === index) setEditingIndex(null);
+  }
+
+  function startEdit(index: number) {
+    setEditingIndex(index);
+    setEditDraft(value[index]);
+  }
+
+  function commitEdit() {
+    if (editingIndex === null) return;
+    const trimmed = editDraft.trim();
+    if (trimmed === "") {
+      removeRow(editingIndex);
+    } else {
+      onChange(value.map((v, i) => (i === editingIndex ? trimmed : v)));
+    }
+    setEditingIndex(null);
+    setEditDraft("");
+  }
+
+  function cancelEdit() {
+    setEditingIndex(null);
+    setEditDraft("");
   }
 
   return (
@@ -73,15 +98,41 @@ export function InstructionListEditor({
           {value.map((item, i) => (
             <li
               key={`${item}-${i}`}
-              className="rise flex items-center gap-3 font-mono text-sm text-ink"
+              className="rise flex items-start gap-3 py-0.5 font-mono text-sm text-ink"
               style={{ "--i": i } as CSSProperties}
             >
-              <span className="min-w-0 flex-1 truncate">{item}</span>
+              {editingIndex === i ? (
+                <input
+                  type="text"
+                  autoFocus
+                  value={editDraft}
+                  onChange={(e) => setEditDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitEdit();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEdit();
+                    }
+                  }}
+                  onBlur={commitEdit}
+                  className="field min-w-0 flex-1"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startEdit(i)}
+                  className="min-w-0 flex-1 whitespace-normal break-words text-left transition-colors hover:text-ember"
+                >
+                  {item}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => saveMutation.mutate(item)}
                 disabled={saveMutation.isPending || savedTexts.has(item)}
-                className="text-xs text-ink-faint transition-colors hover:text-ink"
+                className="shrink-0 text-xs text-ink-faint transition-colors hover:text-ink"
               >
                 {savedTexts.has(item) ? "■ saved" : "save"}
               </button>
@@ -89,7 +140,7 @@ export function InstructionListEditor({
                 type="button"
                 onClick={() => removeRow(i)}
                 aria-label={`remove ${item}`}
-                className="text-xs text-ink-faint transition-colors hover:text-danger"
+                className="shrink-0 text-xs text-ink-faint transition-colors hover:text-danger"
               >
                 ×
               </button>

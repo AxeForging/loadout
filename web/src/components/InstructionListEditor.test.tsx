@@ -94,4 +94,43 @@ describe("InstructionListEditor", () => {
 
     expect(api.libraryRemove).toHaveBeenCalledWith("abc123");
   });
+
+  it("edits a row in place: click to edit, Enter to commit", async () => {
+    vi.mocked(api.libraryInstructions).mockResolvedValue([]);
+    const onChange = vi.fn();
+    renderEditor(["always write tests first"], onChange);
+
+    await userEvent.click(screen.getByText("always write tests first"));
+    const editInput = screen.getByDisplayValue("always write tests first");
+    await userEvent.clear(editInput);
+    await userEvent.type(editInput, "no coverage theater{Enter}");
+
+    expect(onChange).toHaveBeenCalledWith(["no coverage theater"]);
+  });
+
+  it("cancels an edit with Escape, leaving the value unchanged", async () => {
+    vi.mocked(api.libraryInstructions).mockResolvedValue([]);
+    const onChange = vi.fn();
+    renderEditor(["always write tests first"], onChange);
+
+    await userEvent.click(screen.getByText("always write tests first"));
+    const editInput = screen.getByDisplayValue("always write tests first");
+    await userEvent.type(editInput, " more{Escape}");
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText("always write tests first")).toBeInTheDocument();
+  });
+
+  it("removes the row when an edit is committed as empty text", async () => {
+    vi.mocked(api.libraryInstructions).mockResolvedValue([]);
+    const onChange = vi.fn();
+    renderEditor(["always write tests first", "no coverage theater"], onChange);
+
+    await userEvent.click(screen.getByText("always write tests first"));
+    const editInput = screen.getByDisplayValue("always write tests first");
+    await userEvent.clear(editInput);
+    await userEvent.keyboard("{Enter}");
+
+    expect(onChange).toHaveBeenCalledWith(["no coverage theater"]);
+  });
 });
