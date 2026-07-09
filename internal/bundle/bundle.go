@@ -16,6 +16,7 @@ import (
 
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/store"
+	"github.com/AxeForging/loadout/internal/wizard"
 	"github.com/goccy/go-yaml"
 )
 
@@ -145,6 +146,17 @@ type ImportPlan struct {
 	Identical []string
 	Sources   []domain.SourceRef // bundle sources not registered locally
 
+	// NewProfiles and ConflictProfiles are saved wizard profiles
+	// (profiles/<name>.yaml) found in the bundle — diffed by filename and
+	// raw content hash, the same way artifacts are diffed by ID and hash.
+	NewProfiles      []string
+	ConflictProfiles []string // same name exists locally with different content
+	// NewLibraryEntries are custom-instruction library entries the bundle
+	// has that the local store doesn't. Library entries are
+	// content-addressed (see wizard.AddToLibrary), so merging them is
+	// always safe — there is no conflict concept for the library.
+	NewLibraryEntries []wizard.LibraryEntry
+
 	bundleRoot string
 	cleanup    func()
 }
@@ -159,9 +171,9 @@ func (p *ImportPlan) Close() {
 // Changes reports how many artifacts Apply would write with the given
 // overwrite policy.
 func (p *ImportPlan) Changes(overwrite bool) int {
-	n := len(p.New) + len(p.Sources)
+	n := len(p.New) + len(p.Sources) + len(p.NewProfiles) + len(p.NewLibraryEntries)
 	if overwrite {
-		n += len(p.Conflicts)
+		n += len(p.Conflicts) + len(p.ConflictProfiles)
 	}
 	return n
 }
@@ -238,8 +250,53 @@ func PlanImport(s *store.Store, src string) (*ImportPlan, error) {
 		}
 	}
 
+	bundleProfileNames, err := wizard.ListProfiles(bundleStore)
+	if err != nil {
+		plan.Close()
+		return nil, err
+	}
+	for _, name := range bundleProfileNames {
+		bundleRaw, err := os.ReadFile(filepath.Join(root, "profiles", name+".yaml"))
+		if err != nil {
+			plan.Close()
+			return nil, err
+		}
+		localRaw, err := os.ReadFile(filepath.Join(s.Root, "profiles", name+".yaml"))
+		switch {
+		case os.IsNotExist(err):
+			plan.NewProfiles = append(plan.NewProfiles, name)
+		case err != nil:
+			plan.Close()
+			return nil, err
+		case store.HashBytes(localRaw) != store.HashBytes(bundleRaw):
+			plan.ConflictProfiles = append(plan.ConflictProfiles, name)
+		}
+	}
+
+	localLibrary, err := wizard.ListLibrary(s)
+	if err != nil {
+		plan.Close()
+		return nil, err
+	}
+	bundleLibrary, err := wizard.ListLibrary(bundleStore)
+	if err != nil {
+		plan.Close()
+		return nil, err
+	}
+	haveEntry := map[string]bool{}
+	for _, e := range localLibrary {
+		haveEntry[e.ID] = true
+	}
+	for _, e := range bundleLibrary {
+		if !haveEntry[e.ID] {
+			plan.NewLibraryEntries = append(plan.NewLibraryEntries, e)
+		}
+	}
+
 	sort.Slice(plan.New, func(i, j int) bool { return plan.New[i].ID < plan.New[j].ID })
 	sort.Slice(plan.Conflicts, func(i, j int) bool { return plan.Conflicts[i].ID < plan.Conflicts[j].ID })
+	sort.Strings(plan.NewProfiles)
+	sort.Strings(plan.ConflictProfiles)
 	return plan, nil
 }
 
@@ -313,6 +370,39 @@ func Apply(s *store.Store, p *ImportPlan, overwrite bool) ([]string, error) {
 			return applied, err
 		}
 	}
+
+	if len(p.NewProfiles) > 0 || (overwrite && len(p.ConflictProfiles) > 0) {
+		localDir := filepath.Join(s.Root, "profiles")
+		if err := os.MkdirAll(localDir, 0o755); err != nil {
+			return applied, err
+		}
+		copyProfile := func(name string) error {
+			raw, err := os.ReadFile(filepath.Join(p.bundleRoot, "profiles", name+".yaml"))
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(localDir, name+".yaml"), raw, 0o644)
+		}
+		for _, name := range p.NewProfiles {
+			if err := copyProfile(name); err != nil {
+				return applied, err
+			}
+		}
+		if overwrite {
+			for _, name := range p.ConflictProfiles {
+				if err := copyProfile(name); err != nil {
+					return applied, err
+				}
+			}
+		}
+	}
+
+	for _, entry := range p.NewLibraryEntries {
+		if _, err := wizard.AddToLibrary(s, entry.Text); err != nil {
+			return applied, err
+		}
+	}
+
 	return applied, nil
 }
 

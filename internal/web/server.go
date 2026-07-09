@@ -667,13 +667,25 @@ func (s *Server) handleBundleImportPlan(w http.ResponseWriter, r *http.Request) 
 	if plan.Sources == nil {
 		plan.Sources = []domain.SourceRef{}
 	}
+	if plan.NewProfiles == nil {
+		plan.NewProfiles = []string{}
+	}
+	if plan.ConflictProfiles == nil {
+		plan.ConflictProfiles = []string{}
+	}
+	if plan.NewLibraryEntries == nil {
+		plan.NewLibraryEntries = []wizard.LibraryEntry{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token":     token,
-		"meta":      plan.Meta,
-		"new":       plan.New,
-		"conflicts": plan.Conflicts,
-		"identical": plan.Identical,
-		"sources":   plan.Sources,
+		"token":             token,
+		"meta":              plan.Meta,
+		"new":               plan.New,
+		"conflicts":         plan.Conflicts,
+		"identical":         plan.Identical,
+		"sources":           plan.Sources,
+		"newProfiles":       plan.NewProfiles,
+		"conflictProfiles":  plan.ConflictProfiles,
+		"newLibraryEntries": plan.NewLibraryEntries,
 	})
 }
 
@@ -697,6 +709,11 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 	defer pending.discard()
 
 	sourcesAdded := len(pending.plan.Sources)
+	profilesAdded := len(pending.plan.NewProfiles)
+	if req.Overwrite {
+		profilesAdded += len(pending.plan.ConflictProfiles)
+	}
+	libraryEntriesAdded := len(pending.plan.NewLibraryEntries)
 	applied, err := bundle.Apply(s.opts.Engine.Store, pending.plan, req.Overwrite)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -705,7 +722,12 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 	if applied == nil {
 		applied = []string{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"applied": applied, "sourcesAdded": sourcesAdded})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"applied":             applied,
+		"sourcesAdded":        sourcesAdded,
+		"profilesAdded":       profilesAdded,
+		"libraryEntriesAdded": libraryEntriesAdded,
+	})
 }
 
 // spaHandler serves the embedded SPA with an index.html fallback for client
