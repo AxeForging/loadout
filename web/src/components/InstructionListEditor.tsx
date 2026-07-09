@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
@@ -17,6 +17,8 @@ export function InstructionListEditor({
   const [draft, setDraft] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const confirmTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
   const library = useQuery({ queryKey: ["library"], queryFn: api.libraryInstructions });
 
@@ -62,6 +64,27 @@ export function InstructionListEditor({
   function cancelEdit() {
     setEditingIndex(null);
     setEditDraft("");
+  }
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimeout.current) clearTimeout(confirmTimeout.current);
+    };
+  }, []);
+
+  // Deleting a library entry is permanent (unlike removing a row from the
+  // in-progress list above, which only edits local state until the wizard
+  // is generated) — arm on the first click, require a second click within
+  // 3s to actually delete, so a stray click never silently destroys it.
+  function requestDeleteFromLibrary(id: string) {
+    if (confirmTimeout.current) clearTimeout(confirmTimeout.current);
+    if (confirmingDeleteId === id) {
+      setConfirmingDeleteId(null);
+      removeMutation.mutate(id);
+      return;
+    }
+    setConfirmingDeleteId(id);
+    confirmTimeout.current = setTimeout(() => setConfirmingDeleteId(null), 3000);
   }
 
   return (
@@ -169,11 +192,20 @@ export function InstructionListEditor({
                   </button>
                   <button
                     type="button"
-                    onClick={() => removeMutation.mutate(entry.id)}
-                    aria-label={`delete ${entry.text} from library`}
-                    className="text-xs text-ink-faint transition-colors hover:text-danger"
+                    onClick={() => requestDeleteFromLibrary(entry.id)}
+                    onBlur={() => setConfirmingDeleteId((id) => (id === entry.id ? null : id))}
+                    aria-label={
+                      confirmingDeleteId === entry.id
+                        ? `confirm delete ${entry.text} from library`
+                        : `delete ${entry.text} from library`
+                    }
+                    className={
+                      confirmingDeleteId === entry.id
+                        ? "font-medium text-danger"
+                        : "text-xs text-ink-faint transition-colors hover:text-danger"
+                    }
                   >
-                    ×
+                    {confirmingDeleteId === entry.id ? "confirm ×" : "×"}
                   </button>
                 </span>
               );

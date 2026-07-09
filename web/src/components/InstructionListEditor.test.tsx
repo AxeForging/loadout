@@ -85,12 +85,24 @@ describe("InstructionListEditor", () => {
     expect(onChange).toHaveBeenCalledWith(["no coverage theater"]);
   });
 
-  it("removes a library entry when its delete control is clicked", async () => {
+  it("arms but does not delete a library entry on the first click", async () => {
+    vi.mocked(api.libraryInstructions).mockResolvedValue(sampleLibrary);
+    renderEditor([], vi.fn());
+
+    await userEvent.click(await screen.findByLabelText("delete no coverage theater from library"));
+
+    expect(api.libraryRemove).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("confirm delete no coverage theater from library")).toBeInTheDocument();
+  });
+
+  it("deletes a library entry only on a second, confirming click", async () => {
     vi.mocked(api.libraryInstructions).mockResolvedValue(sampleLibrary);
     vi.mocked(api.libraryRemove).mockResolvedValue({ removed: true });
     renderEditor([], vi.fn());
 
-    await userEvent.click(await screen.findByLabelText("delete no coverage theater from library"));
+    const deleteButton = await screen.findByLabelText("delete no coverage theater from library");
+    await userEvent.click(deleteButton);
+    await userEvent.click(screen.getByLabelText("confirm delete no coverage theater from library"));
 
     expect(api.libraryRemove).toHaveBeenCalledWith("abc123");
   });
