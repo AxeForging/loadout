@@ -108,7 +108,7 @@ func (a Answers) Summary() string {
 	for _, s := range Sections() {
 		for _, q := range s.Questions {
 			switch q.Type {
-			case TypeMulti:
+			case TypeMulti, TypeList:
 				if v := a.List(q.ID); len(v) > 0 {
 					fmt.Fprintf(&b, "- %s: %s\n", q.ID, strings.Join(v, ", "))
 				}
@@ -179,9 +179,39 @@ func (a Answers) validate() (Answers, error) {
 			if _, ok := v.(bool); !ok {
 				return nil, fmt.Errorf("%s: expected true/false, got %v", id, v)
 			}
+		case TypeList:
+			switch vv := v.(type) {
+			case []string:
+				// already the expected shape
+			case []any:
+				for _, item := range vv {
+					if _, ok := item.(string); !ok {
+						return nil, fmt.Errorf("%s: expected a list of strings, got %v", id, item)
+					}
+				}
+			case string:
+				// hand-edited YAML: newline-separated text coerces to a list
+				a[id] = SplitLines(vv)
+			default:
+				return nil, fmt.Errorf("%s: expected a list of strings, got %T", id, v)
+			}
 		}
 	}
 	return a, nil
+}
+
+// SplitLines splits s on newlines, trimming and dropping blank lines. Used to
+// turn a multiline text field (CLI list-question input, or hand-edited YAML)
+// into an ordered []string answer.
+func SplitLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 func hasOption(q Question, value string) bool {

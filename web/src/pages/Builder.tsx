@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Answers, type WizardQuestion, type WizardSection } from "../api";
 import { PageHeader } from "../components/Layout";
+import { InstructionListEditor } from "../components/InstructionListEditor";
 
 // The builder renders the wizard schema served by the binary — the exact
 // same questionnaire as `loadout wizard`, with a review step before any
@@ -251,6 +252,11 @@ function Question({
             onChange={(e) => onChange(e.target.value)}
             placeholder="free text"
             className="field w-full max-w-md"
+          />
+        ) : q.type === "list" ? (
+          <InstructionListEditor
+            value={Array.isArray(current) ? (current as string[]) : []}
+            onChange={onChange}
           />
         ) : (
           <div className="flex flex-wrap gap-2">

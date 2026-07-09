@@ -98,6 +98,9 @@ func artifactSpecs(a Answers) []artifactSpec {
 	if len(a.List("quality.levels")) > 0 {
 		specs = append(specs, artifactSpec{id: "testing", kind: domain.KindInstruction, files: map[string]string{"": testingInstruction(a)}})
 	}
+	if custom := customInstruction(a); custom != "" {
+		specs = append(specs, artifactSpec{id: "custom-instructions", kind: domain.KindInstruction, files: map[string]string{"": custom}})
+	}
 	if a.Bool("continuity.handoff") {
 		specs = append(specs,
 			artifactSpec{id: handoffID, kind: domain.KindCommand, files: map[string]string{"": handoffCommand()}},

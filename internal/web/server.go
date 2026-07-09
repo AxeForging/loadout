@@ -88,6 +88,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/profiles/{name}", s.handleProfileGet)
 	s.mux.HandleFunc("POST /api/profiles", s.handleProfileSave)
 	s.mux.HandleFunc("DELETE /api/profiles/{name}", s.handleProfileDelete)
+	s.mux.HandleFunc("GET /api/library/instructions", s.handleLibraryList)
+	s.mux.HandleFunc("POST /api/library/instructions", s.handleLibraryAdd)
+	s.mux.HandleFunc("DELETE /api/library/instructions/{id}", s.handleLibraryDelete)
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
@@ -511,6 +514,39 @@ func (s *Server) handleProfileSave(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
 	if err := wizard.RemoveProfile(s.opts.Engine.Store, r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
+}
+
+func (s *Server) handleLibraryList(w http.ResponseWriter, r *http.Request) {
+	entries, err := wizard.ListLibrary(s.opts.Engine.Store)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+func (s *Server) handleLibraryAdd(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	entry, err := wizard.AddToLibrary(s.opts.Engine.Store, req.Text)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, entry)
+}
+
+func (s *Server) handleLibraryDelete(w http.ResponseWriter, r *http.Request) {
+	if err := wizard.RemoveFromLibrary(s.opts.Engine.Store, r.PathValue("id")); err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
 	}

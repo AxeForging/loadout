@@ -51,12 +51,14 @@ export type WizardOption = { value: string; label: string };
 export type WizardQuestion = {
   id: string;
   prompt: string;
-  type: "select" | "multi" | "text" | "bool";
+  type: "select" | "multi" | "text" | "bool" | "list";
   options?: WizardOption[];
   default?: unknown;
 };
 export type WizardSection = { id: string; title: string; questions: WizardQuestion[] };
 export type Answers = Record<string, unknown>;
+
+export type LibraryEntry = { id: string; text: string; createdAt: string };
 
 export type BundleMeta = { name: string; createdBy: string; createdAt: string; artifacts: number };
 export type BundleImportPlan = {
@@ -140,6 +142,14 @@ export const api = {
     }),
   deleteProfile: (name: string) =>
     request<{ removed: boolean }>(`/api/profiles/${name}`, { method: "DELETE" }),
+  libraryInstructions: () => request<LibraryEntry[]>("/api/library/instructions"),
+  libraryAdd: (text: string) =>
+    request<LibraryEntry>("/api/library/instructions", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  libraryRemove: (id: string) =>
+    request<{ removed: boolean }>(`/api/library/instructions/${id}`, { method: "DELETE" }),
   bundleImportPlan: (file: File) => {
     const form = new FormData();
     form.set("bundle", file);
