@@ -3,6 +3,7 @@ package wizard
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/AxeForging/loadout/internal/store"
 )
@@ -113,8 +114,42 @@ func conventionsInstruction(a Answers) string {
 	if refs := strings.TrimSpace(a.Str("standards.refs")); refs != "" {
 		fmt.Fprintf(&b, "## Standards\n\nAuthoritative style guides / standards:\n\n")
 		for _, ref := range strings.Split(refs, ",") {
-			fmt.Fprintf(&b, "- %s\n", strings.TrimSpace(ref))
+			if ref := cleanItem(ref); ref != "" {
+				fmt.Fprintf(&b, "- %s\n", ref)
+			}
 		}
+	}
+	return b.String()
+}
+
+// cleanItem trims an entry and strips a single user-typed leading bullet
+// marker (-, *, •) so generated Markdown never double-bullets ("- - foo")
+// when a user pastes text that already has its own bullets.
+func cleanItem(s string) string {
+	s = strings.TrimSpace(s)
+	if r, size := utf8.DecodeRuneInString(s); r == '-' || r == '*' || r == '•' {
+		s = strings.TrimSpace(s[size:])
+	}
+	return s
+}
+
+// customInstruction renders standards.custom as a standalone instruction
+// doc, one clean bullet per entry; returns "" when there are no entries.
+func customInstruction(a Answers) string {
+	var items []string
+	for _, raw := range a.List("standards.custom") {
+		if item := cleanItem(raw); item != "" {
+			items = append(items, item)
+		}
+	}
+	if len(items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("# Custom instructions\n\n")
+	b.WriteString("Team-specific rules — follow these over general defaults when they conflict.\n\n")
+	for _, item := range items {
+		fmt.Fprintf(&b, "- %s\n", item)
 	}
 	return b.String()
 }

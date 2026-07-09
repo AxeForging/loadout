@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/AxeForging/loadout/internal/wizard"
 	"github.com/charmbracelet/huh"
@@ -15,6 +16,7 @@ func collectAnswers() (wizard.Answers, error) {
 
 	strVals := map[string]*string{}
 	listVals := map[string]*[]string{}
+	textListVals := map[string]*string{}
 	boolVals := map[string]*bool{}
 
 	var groups []*huh.Group
@@ -60,6 +62,16 @@ func collectAnswers() (wizard.Answers, error) {
 				fields = append(fields, huh.NewConfirm().
 					Title(q.Prompt).
 					Value(v))
+			case wizard.TypeList:
+				v := new(string)
+				if d, ok := q.Default.([]string); ok {
+					*v = strings.Join(d, "\n")
+				}
+				textListVals[q.ID] = v
+				fields = append(fields, huh.NewText().
+					Title(q.Prompt).
+					Placeholder("one instruction per line").
+					Value(v))
 			}
 		}
 		groups = append(groups, huh.NewGroup(fields...).Title(section.Title))
@@ -75,6 +87,9 @@ func collectAnswers() (wizard.Answers, error) {
 	}
 	for id, v := range listVals {
 		answers[id] = *v
+	}
+	for id, v := range textListVals {
+		answers[id] = wizard.SplitLines(*v)
 	}
 	for id, v := range boolVals {
 		answers[id] = *v

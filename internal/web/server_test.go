@@ -247,6 +247,25 @@ func TestAPI_WizardPlanAndGenerate(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid answers = %d, want 400", rec.Code)
 	}
+
+	// List answers survive JSON decode + validation and produce the
+	// conditional custom-instructions artifact.
+	rec, out = doJSON(t, h, "POST", "/api/wizard/generate", map[string]any{
+		"answers": map[string]any{"standards.custom": []string{"always test", "no coverage theater"}},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("wizard generate with list answer = %d: %s", rec.Code, rec.Body)
+	}
+	created := out["created"].([]any)
+	found := false
+	for _, id := range created {
+		if id == "custom-instructions" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("wizard generate should create custom-instructions, got created=%v", created)
+	}
 }
 
 func TestAPI_ProfilesSaveListGetDelete(t *testing.T) {
@@ -296,6 +315,61 @@ func TestAPI_ProfilesSaveListGetDelete(t *testing.T) {
 	rec, _ = doJSON(t, h, "GET", "/api/profiles/acme-cli", nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("profile should be gone after delete, got %d", rec.Code)
+	}
+}
+
+func TestAPI_LibraryAddListDelete(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	req := httptest.NewRequest("GET", "/api/library/instructions", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list) != 0 {
+		t.Fatalf("library list on empty store = %v, %v", list, err)
+	}
+
+	rec, out := doJSON(t, h, "POST", "/api/library/instructions", map[string]string{"text": "always write tests first"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("add library entry = %d: %s", rec.Code, rec.Body)
+	}
+	id, _ := out["id"].(string)
+	if id == "" || out["text"] != "always write tests first" {
+		t.Fatalf("add library entry response = %v", out)
+	}
+
+	// Adding identical text again returns the same entry, not a duplicate.
+	rec, out = doJSON(t, h, "POST", "/api/library/instructions", map[string]string{"text": "always write tests first"})
+	if rec.Code != http.StatusOK || out["id"] != id {
+		t.Fatalf("duplicate add = %d %v, want same id %q", rec.Code, out, id)
+	}
+
+	rec, _ = doJSON(t, h, "POST", "/api/library/instructions", map[string]string{"text": "   "})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("add empty text = %d, want 400", rec.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/library/instructions", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list) != 1 {
+		t.Fatalf("library list after adds = %v, want exactly one entry", list)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/library/instructions/"+id, nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete library entry = %d: %s", rec.Code, rec.Body)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/library/instructions/"+id, nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("delete already-deleted entry = %d, want 404", rec.Code)
 	}
 }
 

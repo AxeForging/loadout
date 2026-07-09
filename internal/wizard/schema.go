@@ -12,6 +12,7 @@ const (
 	TypeMulti  QuestionType = "multi"  // any of Options
 	TypeText   QuestionType = "text"   // free text
 	TypeBool   QuestionType = "bool"   // yes/no
+	TypeList   QuestionType = "list"   // ordered free-text entries
 )
 
 type Option struct {
@@ -78,6 +79,7 @@ func Sections() []Section {
 					Default: "inline",
 				},
 				{ID: "standards.refs", Prompt: "Links to style guides / standards (comma-separated, optional)", Type: TypeText, Default: ""},
+				{ID: "standards.custom", Prompt: "Custom instructions — one per entry", Type: TypeList, Default: []string{}},
 			},
 		},
 		{

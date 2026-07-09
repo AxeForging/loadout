@@ -346,6 +346,44 @@ func TestGenerate_ChangeScopeReachesTheWorkflowSkill(t *testing.T) {
 	}
 }
 
+func TestPlan_CustomInstructionsOnlyWhenAnswered(t *testing.T) {
+	s := testStore(t)
+	create, _ := Plan(s, Answers{})
+	if contains(create, "custom-instructions") {
+		t.Errorf("custom-instructions should not be planned without answers: %v", create)
+	}
+
+	s2 := testStore(t)
+	create2, _ := Plan(s2, Answers{"standards.custom": []string{"always test"}})
+	if !contains(create2, "custom-instructions") {
+		t.Errorf("custom-instructions should be planned when standards.custom is set: %v", create2)
+	}
+
+	g, err := Generate(s2, Answers{"standards.custom": []string{"always test", "no coverage theater"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(idsOf(g.Created), "custom-instructions") {
+		t.Fatalf("custom-instructions artifact not created, got: %v", g.Created)
+	}
+	raw, err := os.ReadFile(filepath.Join(s2.Root, "instructions", "custom-instructions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "- always test\n") || !strings.Contains(text, "- no coverage theater\n") {
+		t.Errorf("custom-instructions.md missing clean bullets:\n%s", text)
+	}
+}
+
+func idsOf(arts []domain.Artifact) []string {
+	out := make([]string, 0, len(arts))
+	for _, a := range arts {
+		out = append(out, a.ID)
+	}
+	return out
+}
+
 func TestGenerate_CommandsRenderAsValidSingleFileArtifacts(t *testing.T) {
 	a, _ := LoadPreset("web-app")
 	s := testStore(t)

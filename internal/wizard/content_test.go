@@ -60,3 +60,41 @@ func TestChangeScopeGuidance_UnknownModeFallsBackToBalanced(t *testing.T) {
 		t.Errorf("unknown mode should fall back to balanced guidance, got %q", got)
 	}
 }
+
+func TestCleanItem_StripsOneLeadingBulletMarker(t *testing.T) {
+	cases := map[string]string{
+		"- always test":        "always test",
+		"* always test":        "always test",
+		"• always test":        "always test",
+		"  - always test  ":    "always test",
+		"always test":          "always test",
+		"- - always test":      "- always test",
+		"":                     "",
+		"   ":                  "",
+		"-":                    "",
+		"not-a-bullet, really": "not-a-bullet, really",
+	}
+	for in, want := range cases {
+		if got := cleanItem(in); got != want {
+			t.Errorf("cleanItem(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCustomInstruction_SanitizesUserBullets(t *testing.T) {
+	a := Answers{"standards.custom": []string{"- Always ensure tests that are real", "edge cases", "  "}}
+	got := customInstruction(a)
+	want := "# Custom instructions\n\nTeam-specific rules — follow these over general defaults when they conflict.\n\n- Always ensure tests that are real\n- edge cases\n"
+	if got != want {
+		t.Errorf("customInstruction() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestCustomInstruction_EmptyReturnsEmpty(t *testing.T) {
+	if got := customInstruction(Answers{}); got != "" {
+		t.Errorf("customInstruction() with no answers = %q, want empty", got)
+	}
+	if got := customInstruction(Answers{"standards.custom": []string{"  ", "-"}}); got != "" {
+		t.Errorf("customInstruction() with only blank/bullet-only entries = %q, want empty", got)
+	}
+}

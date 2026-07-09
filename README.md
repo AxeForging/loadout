@@ -135,10 +135,13 @@ updates:
 `loadout wizard` interviews you about what you build (app types, languages, toolchain, docker), your **engineering conventions** (lefthook git hooks, linters, branching model, commit convention, PR-title convention), your **testing strategy** (which levels are mandatory — unit/component/integration/e2e — per framework and runner, plus a mocking policy) and whether you want **spec-driven development** and **cross-agent context handoff**. Wherever the built-in options (Go, TypeScript, Python; a handful of package managers, linters, unit-test runners) don't cover your stack, an "Other" free-text field takes any custom value straight into the generated docs. It generates ready-to-sync artifacts:
 
 - `core`, `toolchain`, `conventions`, `testing` instructions (managed blocks in every agent's instruction file)
+- `custom-instructions` — your own house rules, one per line, only generated when you add at least one (see below)
 - a `commit-and-pr` skill — commit/branch/PR rules with the validation regex, plus a ready `lefthook.yml` in its references
 - a `linting` skill with run/fix commands per linter, and `docker-workflows` if you use docker
 - `/plan` + `/spec` commands and an `sdd-workflow` skill (light or full spec templates)
 - `/handoff` + `/resume` commands and a `context-handoff` skill (see below)
+
+**Custom instructions** — the Standards station has a `standards.custom` field for house rules that don't fit the built-in questions (e.g. "always write tests before fixing a bug"). In the CLI it's a multiline field, one instruction per line; in the web Builder it's a row editor — type one, press Enter, delete rows individually. Any row can be saved to a store-wide **instruction library** (`store/library/instructions.yaml`) and re-added with one click in a later wizard run, so you don't retype the same house rules for every project.
 
 Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
 
@@ -164,7 +167,7 @@ loadout profile show acme-backend                                   # print its 
 loadout profile rm acme-backend                                     # delete it
 ```
 
-Profiles live at `store/profiles/<name>.yaml` — plain YAML in the canonical store, so they travel with it through git or a bundle. The web Builder has the same picker next to the preset chips, plus a "Save as profile" action on the review step.
+Profiles live at `store/profiles/<name>.yaml` — plain YAML in the canonical store, so they travel with it through git or a bundle. The web Builder has the same picker next to the preset chips, plus a "Save as profile" action on the review step. (Profiles save a whole answer set; the instruction library above saves individual custom-instruction lines — the two are independent and can be used together.)
 
 ## Context handoff — continue anywhere
 
@@ -189,7 +192,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, and the **Builder** — the wizard as a multi-step form. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, and the **Builder** — the wizard as a multi-step form, including the row-based custom-instructions editor and its reusable library. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 
