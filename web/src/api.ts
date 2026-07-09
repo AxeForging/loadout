@@ -72,6 +72,13 @@ export type BundleImportPlan = {
 };
 export type BundleImportResult = { applied: string[]; sourcesAdded: number };
 
+export type ExportSelection = {
+  artifactIds: string[];
+  profileNames: string[];
+  libraryEntryIds: string[];
+  sources: boolean;
+};
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `${res.status}`;
@@ -99,6 +106,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 async function requestUpload<T>(path: string, form: FormData): Promise<T> {
   const res = await fetch(path, { method: "POST", body: form });
   return handleResponse<T>(res);
+}
+
+// For endpoints that stream a file back instead of JSON.
+async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...init });
+  if (!res.ok) {
+    let message = `${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* keep status text */
+    }
+    throw new Error(message);
+  }
+  return res.blob();
 }
 
 export const api = {
@@ -159,6 +182,8 @@ export const api = {
     }),
   libraryGroupRemove: (name: string) =>
     request<{ removed: boolean }>(`/api/library/groups/${name}`, { method: "DELETE" }),
+  bundleExportSelected: (sel: ExportSelection) =>
+    requestBlob("/api/bundle/export", { method: "POST", body: JSON.stringify(sel) }),
   bundleImportPlan: (file: File) => {
     const form = new FormData();
     form.set("bundle", file);

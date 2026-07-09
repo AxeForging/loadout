@@ -300,31 +300,38 @@ func PlanImport(s *store.Store, src string) (*ImportPlan, error) {
 	return plan, nil
 }
 
+// copyArtifactFiles copies one artifact's file(s) (single file or whole
+// directory) from srcRoot to destRoot, replacing whatever's already at the
+// destination. Shared by Apply (import) and ExportSelected (export).
+func copyArtifactFiles(srcRoot, destRoot string, art domain.Artifact) error {
+	src := filepath.Join(srcRoot, filepath.FromSlash(art.Path))
+	dst := filepath.Join(destRoot, filepath.FromSlash(art.Path))
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return store.CopyTree(src, dst)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, raw, info.Mode().Perm())
+}
+
 // Apply merges the planned bundle into the store. Conflicting artifacts are
 // skipped unless overwrite is true. The caller must have confirmed the plan.
 func Apply(s *store.Store, p *ImportPlan, overwrite bool) ([]string, error) {
 	var applied []string
 	copyArtifact := func(art domain.Artifact) error {
-		src := filepath.Join(p.bundleRoot, filepath.FromSlash(art.Path))
-		dst := filepath.Join(s.Root, filepath.FromSlash(art.Path))
-		info, err := os.Stat(src)
-		if err != nil {
-			return err
-		}
-		if err := os.RemoveAll(dst); err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return store.CopyTree(src, dst)
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
-		}
-		raw, err := os.ReadFile(src)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(dst, raw, info.Mode().Perm())
+		return copyArtifactFiles(p.bundleRoot, s.Root, art)
 	}
 
 	for _, art := range p.New {

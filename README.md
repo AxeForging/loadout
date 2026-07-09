@@ -57,7 +57,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
 | `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
-| `loadout bundle export [--archive]` | Export the whole store as a shareable directory or `.loadout.tar.gz` |
+| `loadout bundle export [--archive]` | Export the store as a shareable directory or `.loadout.tar.gz` — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
 | `loadout bundle import <path>` | Validate a bundle, show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`) |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
@@ -142,7 +142,7 @@ updates:
 - `/plan` + `/spec` commands and an `sdd-workflow` skill (light or full spec templates)
 - `/handoff` + `/resume` commands and a `context-handoff` skill (see below)
 
-**Custom instructions** — the Standards station has a `standards.custom` field for house rules that don't fit the built-in questions (e.g. "always write tests before fixing a bug"). In the CLI it's a multiline field, one instruction per line; in the web Builder it's a row editor — type one, press Enter, delete rows individually. Any row can be saved to a store-wide **instruction library** (`store/library/instructions.yaml`) and re-added with one click in a later wizard run, so you don't retype the same house rules for every project.
+**Custom instructions** — the Standards station has a `standards.custom` field for house rules that don't fit the built-in questions (e.g. "always write tests before fixing a bug"). In the CLI it's a multiline field, one instruction per line; in the web Builder it's a row editor — type one, press Enter, click a row to edit it in place, delete rows individually. Any row can be saved to a store-wide **instruction library** (`store/library/instructions.yaml`) and re-added with one click in a later wizard run, so you don't retype the same house rules for every project. Library entries can be organized into **groups** (`store/library/groups.yaml`) — name a set of entries once, then add the whole set to a wizard run in one click instead of picking each individually. The web UI's **Library** page is the dedicated place to browse, search, delete, and manage groups; entries are content-addressed, so the library never offers renaming an entry in place — delete and re-add if the wording needs to change.
 
 Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
 
@@ -209,7 +209,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, and the **Builder** — the wizard as a multi-step form, including the row-based custom-instructions editor and its reusable library. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, the **Builder** — the wizard as a multi-step form, a dedicated **Library** page for browsing/searching/deleting custom instructions and managing groups, and a dedicated **Export** page for picking exactly what to share. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 
@@ -222,7 +222,15 @@ loadout sync                                    # installs into their agents
 
 A bundle is the store tree plus `bundle.yaml` metadata — a plain directory by default (commit it to a repo) or a single archive with `--archive`. Import never merges silently: new artifacts and unregistered sources are listed, ID conflicts are skipped unless you pass `--on-conflict overwrite`, and nothing happens without confirmation. Saved wizard profiles and the custom-instructions library travel with the bundle too — new profiles are added, conflicting ones follow the same `--on-conflict` policy as artifacts, and library entries always merge (they're deduplicated by content, so re-importing one is a safe no-op).
 
-The web UI covers the same import flow for `.loadout.tar.gz` archives: from the dashboard's "share" section, upload the file, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only.
+By default `bundle export` packages the whole store. To share less, pass any of `--artifacts`, `--profiles`, `--library` (repeatable, e.g. `--artifacts demo --artifacts style`) and the export contains exactly what you listed instead:
+
+```bash
+loadout bundle export --archive --artifacts demo --profiles acme-backend   # → just those two, nothing else
+```
+
+`--sources` additionally includes `sources.lock.yaml` in a selective export (it's always included in a full, unfiltered one).
+
+The web UI covers the same import flow for `.loadout.tar.gz` archives: from the dashboard's "share" section, upload the file, review the plan (new / conflicting / identical artifacts, new sources), toggle skip-vs-overwrite for conflicts, and confirm — then run a sync to install into your agents. Directory bundles (the non-`--archive` export) are import-able from the CLI only. For picking exactly what to share instead of exporting everything, the dashboard's share section links to a dedicated **Export** page: chip-select artifacts (grouped by kind, with per-kind and select-all shortcuts), profiles, and library entries or whole groups, then download the resulting `.loadout.tar.gz`.
 
 ## Supported agents
 

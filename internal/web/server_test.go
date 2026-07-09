@@ -13,6 +13,7 @@ import (
 
 	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/adapter/claudecode"
+	"github.com/AxeForging/loadout/internal/bundle"
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/engine"
 	"github.com/AxeForging/loadout/internal/source"
@@ -439,6 +440,57 @@ func TestAPI_LibraryGroupsSaveListDelete(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &entries)
 	if len(entries) != 1 {
 		t.Fatalf("library entries after group delete = %v, want the entry untouched", entries)
+	}
+}
+
+func TestAPI_BundleExportSelected(t *testing.T) {
+	srv, _ := newTestServer(t)
+	// newTestServer seeds "demo"; add a second artifact to prove filtering.
+	if _, err := srv.opts.Engine.Store.New(domain.KindSkill, "extra"); err != nil {
+		t.Fatal(err)
+	}
+	h := srv.Handler()
+
+	body, _ := json.Marshal(map[string]any{"artifactIds": []string{"demo"}})
+	req := httptest.NewRequest("POST", "/api/bundle/export", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export selected = %d: %s", rec.Code, rec.Body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/gzip" {
+		t.Errorf("Content-Type = %q, want application/gzip", ct)
+	}
+
+	archive := filepath.Join(t.TempDir(), "selected.loadout.tar.gz")
+	if err := os.WriteFile(archive, rec.Body.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh, err := store.Init(filepath.Join(t.TempDir(), "store"), "fresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := bundle.PlanImport(fresh, archive)
+	if err != nil {
+		t.Fatalf("PlanImport() on the streamed archive error = %v", err)
+	}
+	defer plan.Close()
+	if len(plan.New) != 1 || plan.New[0].ID != "demo" {
+		t.Fatalf("plan.New = %v, want only [demo] — 'extra' should not have been included", plan.New)
+	}
+}
+
+func TestAPI_BundleExportSelected_UnknownArtifactRejected(t *testing.T) {
+	srv, _ := newTestServer(t)
+	h := srv.Handler()
+
+	body, _ := json.Marshal(map[string]any{"artifactIds": []string{"does-not-exist"}})
+	req := httptest.NewRequest("POST", "/api/bundle/export", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("export with unknown artifact = %d, want 400", rec.Code)
 	}
 }
 

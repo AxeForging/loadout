@@ -97,6 +97,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
+	s.mux.HandleFunc("POST /api/bundle/export", s.handleBundleExportSelected)
 	s.mux.HandleFunc("POST /api/bundle/import/plan", s.handleBundleImportPlan)
 	s.mux.HandleFunc("POST /api/bundle/import/apply", s.handleBundleImportApply)
 	s.mux.Handle("/", spaHandler())
@@ -635,6 +636,34 @@ func (s *Server) handleBundleExport(w http.ResponseWriter, r *http.Request) {
 	tmp, err := bundle.ExportArchiveTemp(s.opts.Engine.Store, "loadout web")
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tmp.Cleanup()
+	w.Header().Set("Content-Disposition", `attachment; filename="`+file+`"`)
+	w.Header().Set("Content-Type", "application/gzip")
+	http.ServeFile(w, r, tmp.Path)
+}
+
+func (s *Server) handleBundleExportSelected(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ArtifactIDs     []string `json:"artifactIds"`
+		ProfileNames    []string `json:"profileNames"`
+		LibraryEntryIDs []string `json:"libraryEntryIds"`
+		Sources         bool     `json:"sources"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+	sel := bundle.Selection{
+		ArtifactIDs: req.ArtifactIDs, ProfileNames: req.ProfileNames,
+		LibraryEntryIDs: req.LibraryEntryIDs, Sources: req.Sources,
+	}
+	name := s.opts.Engine.Store.Manifest.Name
+	file := strings.ReplaceAll(name, " ", "-") + ".loadout.tar.gz"
+	tmp, err := bundle.ExportSelectedArchiveTemp(s.opts.Engine.Store, "loadout web", sel)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
 	defer tmp.Cleanup()

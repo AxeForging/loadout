@@ -21,6 +21,10 @@ func bundleCmd() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "out", Aliases: []string{"o"}, Usage: "Destination path (default: derived from the store name)"},
 					&cli.BoolFlag{Name: "archive", Usage: "Pack into a single .loadout.tar.gz instead of a directory"},
+					&cli.StringSliceFlag{Name: "artifacts", Usage: "Only export these artifact IDs (repeatable) — omit to export every artifact"},
+					&cli.StringSliceFlag{Name: "profiles", Usage: "Only export these saved profile names (repeatable) — omit to export none unless no selection flag is given at all"},
+					&cli.StringSliceFlag{Name: "library", Usage: "Only export these library entry IDs (repeatable) — omit to export none unless no selection flag is given at all"},
+					&cli.BoolFlag{Name: "sources", Usage: "Include sources.lock.yaml (only meaningful alongside --artifacts/--profiles/--library)"},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					s, err := openStore(cmd)
@@ -29,21 +33,42 @@ func bundleCmd() *cli.Command {
 					}
 					createdBy := "loadout " + build.Version
 					out := cmd.String("out")
+
+					artifactIDs := cmd.StringSlice("artifacts")
+					profileNames := cmd.StringSlice("profiles")
+					libraryIDs := cmd.StringSlice("library")
+					selective := len(artifactIDs) > 0 || len(profileNames) > 0 || len(libraryIDs) > 0
+
 					if cmd.Bool("archive") {
 						if out == "" {
 							out = s.Manifest.Name + ".loadout.tar.gz"
 						}
-						meta, err := bundle.ExportArchive(s, out, createdBy)
+						var meta bundle.Meta
+						if selective {
+							meta, err = bundle.ExportSelectedArchive(s, out, createdBy, bundle.Selection{
+								ArtifactIDs: artifactIDs, ProfileNames: profileNames, LibraryEntryIDs: libraryIDs, Sources: cmd.Bool("sources"),
+							})
+						} else {
+							meta, err = bundle.ExportArchive(s, out, createdBy)
+						}
 						if err != nil {
 							return err
 						}
 						fmt.Printf("Exported %q (%d artifact(s)) to %s\n", meta.Name, meta.Artifacts, out)
 						return nil
 					}
+
 					if out == "" {
 						out = s.Manifest.Name + "-loadout"
 					}
-					meta, err := bundle.Export(s, out, createdBy)
+					var meta bundle.Meta
+					if selective {
+						meta, err = bundle.ExportSelected(s, out, createdBy, bundle.Selection{
+							ArtifactIDs: artifactIDs, ProfileNames: profileNames, LibraryEntryIDs: libraryIDs, Sources: cmd.Bool("sources"),
+						})
+					} else {
+						meta, err = bundle.Export(s, out, createdBy)
+					}
 					if err != nil {
 						return err
 					}
