@@ -28,10 +28,22 @@ Agent configs are fragmented across `~/.claude`, `~/.codex`, `~/.gemini`, `~/.cu
 ## Install
 
 ```bash
-go install github.com/AxeForging/loadout/cmd/loadout@latest
+curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/AxeForging/loadout/main/install.sh | sh
 ```
 
-Or grab a binary from [Releases](https://github.com/AxeForging/loadout/releases).
+The installer downloads the release for your platform and verifies its SHA-256
+checksum. Because Loadout is private, `GITHUB_TOKEN` must be able to read the
+repository. Set `LOADOUT_VERSION=v1.4.0` to pin a release or
+`LOADOUT_INSTALL_DIR=~/.local/bin` to choose the destination. `go install
+github.com/AxeForging/loadout/cmd/loadout@latest` remains supported.
+
+## Pull request quality gates
+
+PR validation runs [Structlint](https://github.com/AxeForging/structlint) and
+[Dupehound](https://github.com/AxeForging/dupehound) through
+[Gauntlet](https://github.com/AxeForging/gauntlet). Structural findings apply to
+the whole run; duplication findings are scoped to lines changed by the PR.
 
 ## Quick start
 

@@ -70,7 +70,10 @@ file_naming_pattern:
 
 ignore:
   - ".git"
+  - ".claude"
   - "vendor"
   - "node_modules"
+  - "web/node_modules"
+  - "web/tsconfig.tsbuildinfo"
   - "bin"
   - "dist"
