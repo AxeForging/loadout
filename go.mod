@@ -1,6 +1,8 @@
 module github.com/AxeForging/loadout
 
-go 1.24.6
+go 1.25.0
+
+toolchain go1.25.10
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10

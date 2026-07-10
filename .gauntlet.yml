@@ -1,0 +1,11 @@
+custom_gates:
+  # Structural policy is whole-run because findings may identify paths only.
+  structlint:
+    command: ["structlint", "validate", "--format", "github"]
+    parser: github-annotations
+    line_scoped: false
+  # Duplication findings carry locations and are scoped to changed lines.
+  dupehound:
+    command: ["dupehound", "scan", "--format", "github", "--quiet"]
+    parser: github-annotations
+    line_scoped: true
