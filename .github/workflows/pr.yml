@@ -48,11 +48,11 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      - name: Install candidate and external quality gates
+      - name: Build candidate and install external quality gates
         run: |
-          go install ./cmd/loadout
           QUALITY_BIN="$RUNNER_TEMP/quality-bin"
           mkdir -p "$QUALITY_BIN"
+          go build -o "$QUALITY_BIN/loadout" ./cmd/loadout
           curl -fsSL https://raw.githubusercontent.com/AxeForging/structlint/main/install.sh | \
             STRUCTLINT_VERSION=v0.6.0 STRUCTLINT_INSTALL_DIR="$QUALITY_BIN" sh
           curl -fsSL https://raw.githubusercontent.com/AxeForging/dupehound/main/install.sh | \
