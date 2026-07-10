@@ -17,12 +17,7 @@ func TestInstallScript_InstallsVerifiedRelease(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	payload := filepath.Join(tmp, "payload")
-	if err := os.Mkdir(payload, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(payload, "loadout"), []byte("#!/bin/sh\nprintf 'installed loadout\\n'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutable(t, filepath.Join(payload, "loadout"), "#!/bin/sh\nprintf 'installed loadout\\n'\n")
 	asset := "loadout-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
 	archive := filepath.Join(tmp, asset)
 	if out, err := exec.Command("tar", "-czf", archive, "-C", payload, "loadout").CombinedOutput(); err != nil {
@@ -37,17 +32,12 @@ func TestInstallScript_InstallsVerifiedRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	bin := filepath.Join(tmp, "bin")
-	if err := os.Mkdir(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	fake := `#!/bin/sh
 set -eu
 while [ "$#" -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
 printf '%s\n' "$url" >> "$CURL_LOG"; case "$url" in */checksums.txt) cp "$SUMS" "$out";; *) cp "$ARCHIVE" "$out";; esac
 `
-	if err := os.WriteFile(filepath.Join(bin, "curl"), []byte(fake), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutable(t, filepath.Join(bin, "curl"), fake)
 	dest, log := filepath.Join(tmp, "install"), filepath.Join(tmp, "curl.log")
 	cmd := exec.Command("sh", filepath.Join("..", "install.sh"))
 	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "LOADOUT_VERSION=v1.4.0", "LOADOUT_INSTALL_DIR="+dest, "ARCHIVE="+archive, "SUMS="+sums, "CURL_LOG="+log)
@@ -64,5 +54,15 @@ printf '%s\n' "$url" >> "$CURL_LOG"; case "$url" in */checksums.txt) cp "$SUMS" 
 	}
 	if !strings.Contains(string(logged), "/releases/download/v1.4.0/"+asset) {
 		t.Fatalf("wrong URL: %s", logged)
+	}
+}
+
+func writeExecutable(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create executable directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o755); err != nil {
+		t.Fatalf("write executable: %v", err)
 	}
 }
