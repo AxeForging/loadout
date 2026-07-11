@@ -78,7 +78,7 @@ Tracked via `loadout spec check 007 <step-id>` (dogfood — R11):
 - [x] wizard generators rewired to the CLI + `sdd` preset <!-- sdd:preset -->
 - [x] unit + integration tests green (`make ci`, `make test-integration`) <!-- sdd:tests -->
 - [x] README section + ROADMAP note <!-- sdd:docs -->
-- [ ] PR open and CI green <!-- sdd:pr -->
+- [x] PR open and CI green <!-- sdd:pr -->
 
 
 ## Non-goals

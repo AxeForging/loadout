@@ -13,71 +13,38 @@ import (
 )
 
 func specCmd() *cli.Command {
-	dirFlag := &cli.StringFlag{
-		Name:  "dir",
-		Usage: "Specs directory relative to the project root",
-		Value: sdd.DefaultDir,
-	}
 	return &cli.Command{
 		Name:      "spec",
 		Usage:     "Spec-driven development: numbered specs with checklists in files or GitHub issues",
 		ArgsUsage: "<subcommand>",
 		Commands: []*cli.Command{
-			{
-				Name:      "init",
-				Usage:     "Scaffold the next free NNN-<name>.md spec (and its tracking issue on the github backend)",
-				ArgsUsage: "<short-name>",
-				Flags: []cli.Flag{
-					dirFlag,
-					&cli.StringFlag{Name: "backend", Usage: "Persist the checklist backend for this project: local or github"},
-					&cli.StringSliceFlag{Name: "label", Usage: "Label for created issues (github backend); repeatable"},
-				},
-				Action: specInitAction,
-			},
-			{
-				Name:   "list",
-				Usage:  "List specs with checklist progress",
-				Flags:  []cli.Flag{dirFlag},
-				Action: specListAction,
-			},
-			{
-				Name:      "status",
-				Usage:     "Show checklist progress (all specs, or one)",
-				ArgsUsage: "[spec]",
-				Flags: []cli.Flag{
-					dirFlag,
-					&cli.BoolFlag{Name: "json", Usage: "Machine-readable output"},
-					&cli.BoolFlag{Name: "require-complete", Usage: "Exit non-zero when any step is open (CI gate)"},
-				},
-				Action: specStatusAction,
-			},
-			{
-				Name:      "check",
-				Usage:     "Mark a step done (idempotent)",
-				ArgsUsage: "<spec> <step-id>",
-				Flags:     []cli.Flag{dirFlag},
-				Action:    func(ctx context.Context, cmd *cli.Command) error { return specSetAction(ctx, cmd, true) },
-			},
-			{
-				Name:      "uncheck",
-				Usage:     "Mark a step open again (idempotent)",
-				ArgsUsage: "<spec> <step-id>",
-				Flags:     []cli.Flag{dirFlag},
-				Action:    func(ctx context.Context, cmd *cli.Command) error { return specSetAction(ctx, cmd, false) },
-			},
-			{
-				Name:      "sync",
-				Usage:     "Reconcile a spec's checklist with its GitHub issue (github backend)",
-				ArgsUsage: "<spec>",
-				Flags: []cli.Flag{
-					dirFlag,
-					&cli.BoolFlag{Name: "from-local", Usage: "Resolve check-state divergence from the local file"},
-					&cli.BoolFlag{Name: "from-github", Usage: "Resolve check-state divergence from the issue"},
-				},
-				Action: specSyncAction,
-			},
+			specSubCmd("init", "Scaffold the next free NNN-<name>.md spec (and its tracking issue on the github backend)", "<short-name>", specInitAction,
+				&cli.StringFlag{Name: "backend", Usage: "Persist the checklist backend for this project: local or github"},
+				&cli.StringSliceFlag{Name: "label", Usage: "Label for created issues (github backend); repeatable"}),
+			specSubCmd("list", "List specs with checklist progress", "", specListAction),
+			specSubCmd("status", "Show checklist progress (all specs, or one)", "[spec]", specStatusAction,
+				&cli.BoolFlag{Name: "json", Usage: "Machine-readable output"},
+				&cli.BoolFlag{Name: "require-complete", Usage: "Exit non-zero when any step is open (CI gate)"}),
+			specSubCmd("check", "Mark a step done (idempotent)", "<spec> <step-id>",
+				func(ctx context.Context, cmd *cli.Command) error { return specSetAction(ctx, cmd, true) }),
+			specSubCmd("uncheck", "Mark a step open again (idempotent)", "<spec> <step-id>",
+				func(ctx context.Context, cmd *cli.Command) error { return specSetAction(ctx, cmd, false) }),
+			specSubCmd("sync", "Reconcile a spec's checklist with its GitHub issue (github backend)", "<spec>", specSyncAction,
+				&cli.BoolFlag{Name: "from-local", Usage: "Resolve check-state divergence from the local file"},
+				&cli.BoolFlag{Name: "from-github", Usage: "Resolve check-state divergence from the issue"}),
 		},
 	}
+}
+
+// specSubCmd builds one spec subcommand: every one takes --dir plus its own
+// extra flags.
+func specSubCmd(name, usage, argsUsage string, action cli.ActionFunc, extra ...cli.Flag) *cli.Command {
+	flags := append([]cli.Flag{&cli.StringFlag{
+		Name:  "dir",
+		Usage: "Specs directory relative to the project root",
+		Value: sdd.DefaultDir,
+	}}, extra...)
+	return &cli.Command{Name: name, Usage: usage, ArgsUsage: argsUsage, Flags: flags, Action: action}
 }
 
 // specEnv is the resolved project context every spec subcommand needs.
