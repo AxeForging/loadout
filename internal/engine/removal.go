@@ -100,7 +100,9 @@ func (e *Engine) PlanRemoval(ctx context.Context, artifactIDs []string) (*Remova
 				if content, err := e.Store.Content(art); err == nil {
 					if targets, err := ad.Render(art, content); err == nil {
 						for _, tf := range targets {
-							rendered[tf.RelPath] = tf
+							// State records are keyed the same way Plan keys
+							// them, so non-default roots resolve here too.
+							rendered[e.stateKey(tf.Root, tf.RelPath)] = tf
 						}
 					}
 				}
@@ -121,7 +123,22 @@ func (e *Engine) PlanRemoval(ctx context.Context, artifactIDs []string) (*Remova
 					})
 					continue
 				}
-				abs := filepath.Join(det.Home, filepath.FromSlash(relPath))
+				base, err := e.resolveBase(tf.Root, det.Home)
+				if err != nil {
+					rp.Warnings = append(rp.Warnings, RemovalWarning{
+						Artifact: artID, Agent: agentID, RelPath: relPath,
+						Reason: fmt.Sprintf("cannot resolve target root: %v — left on disk untouched, state record cleared", err),
+					})
+					continue
+				}
+				abs, err := joinUnder(base, tf.RelPath)
+				if err != nil {
+					rp.Warnings = append(rp.Warnings, RemovalWarning{
+						Artifact: artID, Agent: agentID, RelPath: relPath,
+						Reason: fmt.Sprintf("%v — left on disk untouched, state record cleared", err),
+					})
+					continue
+				}
 
 				switch tf.Merge {
 				case adapter.MergeReplace:

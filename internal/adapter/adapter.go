@@ -35,12 +35,29 @@ const (
 	MergeJSON MergeStrategy = "json-merge"
 )
 
-// TargetFile is one desired file inside an agent home.
+// TargetRoot selects the base directory a TargetFile's RelPath is resolved
+// against. The zero value keeps the historical behavior (the agent home).
+type TargetRoot string
+
+const (
+	// RootAgentHome resolves RelPath against Detection.Home (default).
+	RootAgentHome TargetRoot = ""
+	// RootUserHome resolves RelPath against the user's home directory —
+	// for agent files that live outside the agent home (e.g. ~/.claude.json).
+	RootUserHome TargetRoot = "user-home"
+	// RootProject resolves RelPath against the active project root; without
+	// one the target is reported as not applicable, never guessed.
+	RootProject TargetRoot = "project"
+)
+
+// TargetFile is one desired file inside an agent home (or, via Root, the
+// user home or the active project).
 type TargetFile struct {
 	RelPath string
 	Content []byte
 	Mode    fs.FileMode
 	Merge   MergeStrategy
+	Root    TargetRoot
 }
 
 // Adapter translates canonical artifacts for one agent.

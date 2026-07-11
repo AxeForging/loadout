@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/store"
 	"github.com/goccy/go-yaml"
@@ -29,6 +30,10 @@ type SnapshotEntry struct {
 	Op      Op             `yaml:"op"`
 	Mode    fs.FileMode    `yaml:"mode"`
 	IsDir   bool           `yaml:"isDir"`
+	// Root disambiguates the backup copy location for targets outside the
+	// agent home; empty (agent home) keeps the historical layout, so old
+	// snapshots load and restore unchanged.
+	Root adapter.TargetRoot `yaml:"root,omitempty"`
 }
 
 // Snapshot is a timestamped set of pre-write file backups.
@@ -50,6 +55,17 @@ type snapTarget struct {
 	op      Op
 	mode    fs.FileMode
 	isDir   bool
+	root    adapter.TargetRoot
+}
+
+// snapshotRel is where a target's backup copy lives inside the snapshot's
+// files/ tree. Non-default roots get their own segment so an agent-home file
+// and a project/user-home file with the same rel path never collide.
+func snapshotRel(root adapter.TargetRoot, relPath string) string {
+	if root == adapter.RootAgentHome {
+		return filepath.FromSlash(relPath)
+	}
+	return filepath.Join("__"+string(root)+"__", filepath.FromSlash(relPath))
 }
 
 // takeSnapshot backs up the pre-write content of every item that would
@@ -63,7 +79,7 @@ func takeSnapshot(backupDir, trigger string, items []Item, now time.Time) (*Snap
 		}
 		targets = append(targets, snapTarget{
 			agent: it.Agent, relPath: it.RelPath, absPath: it.AbsPath,
-			op: it.Op, mode: it.Mode, isDir: it.IsDir,
+			op: it.Op, mode: it.Mode, isDir: it.IsDir, root: it.Root,
 		})
 	}
 	return captureSnapshot(backupDir, trigger, targets, now)
@@ -86,7 +102,7 @@ func captureSnapshot(backupDir, trigger string, targets []snapTarget, now time.T
 			}
 			return nil, fmt.Errorf("snapshot stat %s: %w", tgt.absPath, err)
 		}
-		dst := filepath.Join(snapDir, "files", string(tgt.agent), filepath.FromSlash(tgt.relPath))
+		dst := filepath.Join(snapDir, "files", string(tgt.agent), snapshotRel(tgt.root, tgt.relPath))
 		isDir := tgt.isDir || info.IsDir()
 		if isDir {
 			if err := store.CopyTree(tgt.absPath, dst); err != nil {
@@ -103,7 +119,7 @@ func captureSnapshot(backupDir, trigger string, targets []snapTarget, now time.T
 		}
 		entries = append(entries, SnapshotEntry{
 			Agent: tgt.agent, RelPath: tgt.relPath, AbsPath: tgt.absPath,
-			Op: tgt.op, Mode: mode, IsDir: isDir,
+			Op: tgt.op, Mode: mode, IsDir: isDir, Root: tgt.root,
 		})
 	}
 
@@ -229,7 +245,7 @@ func (e *Engine) ApplyRestore(ctx context.Context, snap *Snapshot, confirm func(
 		for _, en := range snap.Entries {
 			targets = append(targets, snapTarget{
 				agent: en.Agent, relPath: en.RelPath, absPath: en.AbsPath,
-				op: OpUpdate, mode: en.Mode, isDir: en.IsDir,
+				op: OpUpdate, mode: en.Mode, isDir: en.IsDir, root: en.Root,
 			})
 		}
 		if _, err := captureSnapshot(e.BackupDir, "restore", targets, e.now()); err != nil {
@@ -239,7 +255,7 @@ func (e *Engine) ApplyRestore(ctx context.Context, snap *Snapshot, confirm func(
 
 	srcRoot := filepath.Join(snap.dir, "files")
 	for _, en := range snap.Entries {
-		src := filepath.Join(srcRoot, string(en.Agent), filepath.FromSlash(en.RelPath))
+		src := filepath.Join(srcRoot, string(en.Agent), snapshotRel(en.Root, en.RelPath))
 		if en.IsDir {
 			if err := os.RemoveAll(en.AbsPath); err != nil {
 				return 0, err

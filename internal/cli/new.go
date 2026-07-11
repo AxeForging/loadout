@@ -15,7 +15,7 @@ func newCmd() *cli.Command {
 	return &cli.Command{
 		Name:      "new",
 		Usage:     "Scaffold a new artifact in the store (or draft one with your logged-in agent via --ai)",
-		ArgsUsage: "<skill|instruction|command|hook> <name>",
+		ArgsUsage: "<skill|instruction|command|hook|mcp> <name>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "ai",
@@ -35,7 +35,7 @@ func newCmd() *cli.Command {
 			kind := domain.ArtifactKind(cmd.Args().Get(0))
 			name := cmd.Args().Get(1)
 			if kind == "" || name == "" {
-				return fmt.Errorf("usage: loadout new <skill|instruction|command|hook> <name>")
+				return fmt.Errorf("usage: loadout new <skill|instruction|command|hook|mcp> <name>")
 			}
 			s, err := openStore(cmd)
 			if err != nil {

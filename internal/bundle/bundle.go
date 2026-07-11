@@ -220,6 +220,10 @@ func PlanImport(s *store.Store, src string) (*ImportPlan, error) {
 	}
 
 	for _, art := range bundleStore.Manifest.Artifacts {
+		if err := validateIncoming(bundleStore, art); err != nil {
+			plan.Close()
+			return nil, err
+		}
 		local, exists := s.Artifact(art.ID)
 		if !exists {
 			plan.New = append(plan.New, art)
@@ -511,4 +515,26 @@ func (r *sourceLockReader) read() ([]domain.SourceRef, error) {
 		return nil, err
 	}
 	return lf.Sources, nil
+}
+
+// validateIncoming rejects structurally invalid incoming artifacts before
+// they can enter the plan. Today this only guards MCP specs — including the
+// no-literal-secrets rule, so a tampered bundle can't smuggle credentials
+// into a store that must stay shareable.
+func validateIncoming(bundleStore *store.Store, art domain.Artifact) error {
+	if art.Kind != domain.KindMCP {
+		return nil
+	}
+	content, err := bundleStore.Content(art)
+	if err != nil {
+		return fmt.Errorf("bundle artifact %s: %w", art.ID, err)
+	}
+	raw, ok := content.Files["mcp.yaml"]
+	if !ok {
+		return fmt.Errorf("bundle artifact %s: missing mcp.yaml", art.ID)
+	}
+	if _, err := domain.ParseMCPSpec(raw); err != nil {
+		return fmt.Errorf("bundle artifact %s: %w", art.ID, err)
+	}
+	return nil
 }

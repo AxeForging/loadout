@@ -38,6 +38,9 @@ func (s *Store) New(kind domain.ArtifactKind, name string) (domain.Artifact, err
 		relPath = filepath.Join(dir, name)
 		files["hook.yaml"] = scaffoldFile{content: hookYAMLTemplate()}
 		files["run.sh"] = scaffoldFile{content: hookScriptTemplate(name), mode: 0o755}
+	case domain.KindMCP:
+		relPath = filepath.Join(dir, name)
+		files["mcp.yaml"] = scaffoldFile{content: mcpYAMLTemplate(name)}
 	case domain.KindSettings:
 		return domain.Artifact{}, fmt.Errorf("settings fragments are created per agent: add settings/<agent>.yaml manually")
 	}
@@ -155,4 +158,29 @@ set -euo pipefail
 # Hook payload arrives on stdin as JSON (agent-specific shape).
 exit 0
 `, name)
+}
+
+func mcpYAMLTemplate(name string) string {
+	return `# Canonical MCP server definition. Adapters install it into each agent's
+# native MCP config (claude-code, gemini-cli, cursor today).
+#
+# Secrets NEVER go in this file: use ${VAR} placeholders — they are passed
+# through verbatim and resolve from the environment at agent runtime.
+#
+# scope: user    → the agent's global config (default)
+# scope: project → the project's config (.mcp.json, .cursor/mcp.json, ...);
+#                  synced with: loadout sync --project <dir>
+transport: stdio
+command: npx
+args: ["-y", "@modelcontextprotocol/server-` + name + `"]
+env:
+  # EXAMPLE_TOKEN: ${EXAMPLE_TOKEN}
+scope: user
+
+# Remote server form instead:
+# transport: http   # or sse
+# url: https://mcp.example.com/v1
+# headers:
+#   Authorization: Bearer ${EXAMPLE_KEY}
+`
 }

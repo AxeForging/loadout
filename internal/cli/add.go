@@ -19,7 +19,7 @@ func addCmd() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "kind",
-				Usage: "Artifact kind (skill, instruction, command, hook); inferred when possible",
+				Usage: "Artifact kind (skill, instruction, command, hook, mcp); inferred when possible",
 			},
 			&cli.StringFlag{
 				Name:  "name",
@@ -65,13 +65,13 @@ func addCmd() *cli.Command {
 }
 
 // inferKind resolves the artifact kind from the flag or the path's shape:
-// directories with SKILL.md are skills, with hook.yaml hooks; files default
-// to commands (pass --kind instruction to override).
+// directories with SKILL.md are skills, with hook.yaml hooks, with mcp.yaml
+// mcps; files default to commands (pass --kind instruction to override).
 func inferKind(flag, src string, isDir bool) (domain.ArtifactKind, error) {
 	if flag != "" {
 		kind := domain.ArtifactKind(flag)
 		switch kind {
-		case domain.KindSkill, domain.KindInstruction, domain.KindCommand, domain.KindHook:
+		case domain.KindSkill, domain.KindInstruction, domain.KindCommand, domain.KindHook, domain.KindMCP:
 			return kind, nil
 		}
 		return "", fmt.Errorf("unknown kind %q", flag)
@@ -83,7 +83,10 @@ func inferKind(flag, src string, isDir bool) (domain.ArtifactKind, error) {
 		if _, err := os.Stat(filepath.Join(src, "hook.yaml")); err == nil {
 			return domain.KindHook, nil
 		}
-		return "", fmt.Errorf("cannot infer kind of directory %s (no SKILL.md or hook.yaml) — pass --kind", src)
+		if _, err := os.Stat(filepath.Join(src, "mcp.yaml")); err == nil {
+			return domain.KindMCP, nil
+		}
+		return "", fmt.Errorf("cannot infer kind of directory %s (no SKILL.md, hook.yaml or mcp.yaml) — pass --kind", src)
 	}
 	return domain.KindCommand, nil
 }

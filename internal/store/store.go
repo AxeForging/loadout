@@ -28,6 +28,7 @@ var kindDirs = map[domain.ArtifactKind]string{
 	domain.KindCommand:     "commands",
 	domain.KindHook:        "hooks",
 	domain.KindSettings:    "settings",
+	domain.KindMCP:         "mcps",
 }
 
 // Store is an opened canonical store.

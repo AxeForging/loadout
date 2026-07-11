@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AxeForging/loadout/internal/adapter"
@@ -65,13 +66,49 @@ func newEngine(cmd *cli.Command) (*engine.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	projectRoot, err := resolveProjectRoot(cmd)
+	if err != nil {
+		return nil, err
+	}
 	return &engine.Engine{
 		Store:       s,
 		Registry:    newRegistry(),
 		StatePath:   statePath,
 		BackupDir:   backupDir,
 		KeepBackups: cfg.BackupsKeep(),
+		ProjectRoot: projectRoot,
 	}, nil
+}
+
+// resolveProjectRoot decides what project-scoped artifacts resolve against:
+// an explicit --project wins; otherwise the current directory when it looks
+// like a project (has .git). No project means such targets report n/a.
+func resolveProjectRoot(cmd *cli.Command) (string, error) {
+	if dir := cmd.String("project"); dir != "" {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return "", err
+		}
+		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+			return "", fmt.Errorf("--project %s: not a directory", dir)
+		}
+		return abs, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", nil //nolint:nilerr // no cwd just means no project context
+	}
+	if info, err := os.Stat(filepath.Join(cwd, ".git")); err == nil && info.IsDir() {
+		return cwd, nil
+	}
+	return "", nil
+}
+
+func projectFlag() cli.Flag {
+	return &cli.StringFlag{
+		Name:  "project",
+		Usage: "Project directory for project-scoped artifacts (default: current directory when it is a git repo)",
+	}
 }
 
 // filterFromFlags builds an engine filter from --agent flags and positional

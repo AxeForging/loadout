@@ -36,7 +36,7 @@ func (s *Store) AdoptFrom(kind domain.ArtifactKind, name, src, origin string) (d
 
 	var relPath string
 	switch kind {
-	case domain.KindSkill, domain.KindHook:
+	case domain.KindSkill, domain.KindHook, domain.KindMCP:
 		if !info.IsDir() {
 			return domain.Artifact{}, fmt.Errorf("%s artifacts are directories, %s is a file", kind, src)
 		}
