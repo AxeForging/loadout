@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/AxeForging/loadout/internal/adapter"
@@ -32,6 +34,10 @@ type Engine struct {
 	BackupDir string
 	// KeepBackups caps retained snapshots; <= 0 keeps all.
 	KeepBackups int
+	// ProjectRoot is the absolute directory project-scoped targets resolve
+	// against. Empty means no project context: such targets are reported as
+	// not applicable, never guessed.
+	ProjectRoot string
 	// Clock is injectable for deterministic snapshot IDs in tests; nil uses
 	// the wall clock.
 	Clock func() time.Time
@@ -74,6 +80,11 @@ type Item struct {
 	Op      Op
 	// StateHash is the fragment hash recorded at last install ("" = never).
 	StateHash string
+	// Root selects the base RelPath resolved against (agent home by default).
+	Root adapter.TargetRoot
+	// StateKey is the state.yaml file key: the bare RelPath for agent-home
+	// targets (unchanged historical format), root-prefixed otherwise.
+	StateKey string
 	// IsDir is set on OpDelete items whose AbsPath is a whole directory
 	// (e.g. a skill's skills/<id>/ folder) rather than a single file.
 	IsDir bool
@@ -226,6 +237,10 @@ func (e *Engine) Plan(ctx context.Context, f Filter) (*Plan, error) {
 				return nil, fmt.Errorf("render %s for %s: %w", art.ID, ad.ID(), err)
 			}
 			for _, tf := range targets {
+				if tf.Root == adapter.RootProject && e.ProjectRoot == "" {
+					p.NotApplicable = append(p.NotApplicable, NotApplicable{Agent: ad.ID(), Artifact: art.ID})
+					continue
+				}
 				item, err := e.buildItem(ad.ID(), det.Home, art, tf, st, pending)
 				if err != nil {
 					return nil, err
@@ -237,8 +252,60 @@ func (e *Engine) Plan(ctx context.Context, f Filter) (*Plan, error) {
 	return p, nil
 }
 
+// resolveBase returns the directory a target's RelPath joins against, per
+// its Root. Callers must handle RootProject-without-ProjectRoot before this
+// (Plan reports it as not applicable); here it is an error.
+func (e *Engine) resolveBase(root adapter.TargetRoot, home string) (string, error) {
+	switch root {
+	case adapter.RootAgentHome:
+		return home, nil
+	case adapter.RootUserHome:
+		return os.UserHomeDir()
+	case adapter.RootProject:
+		if e.ProjectRoot == "" {
+			return "", fmt.Errorf("project-scoped target without a project root")
+		}
+		return e.ProjectRoot, nil
+	}
+	return "", fmt.Errorf("unknown target root %q", root)
+}
+
+// stateKey is the state.yaml file key for a target. Agent-home targets keep
+// the bare rel path — the historical format, so existing state files read and
+// write unchanged. Other roots get an explicit prefix; project targets embed
+// the project directory so two projects never share a record.
+func (e *Engine) stateKey(root adapter.TargetRoot, relPath string) string {
+	switch root {
+	case adapter.RootUserHome:
+		return "user-home::" + relPath
+	case adapter.RootProject:
+		return "project:" + e.ProjectRoot + "::" + relPath
+	}
+	return relPath
+}
+
+// joinUnder resolves rel against base and rejects absolute or escaping paths
+// — no target may write outside its declared root.
+func joinUnder(base, rel string) (string, error) {
+	if rel == "" || filepath.IsAbs(rel) || path.IsAbs(rel) {
+		return "", fmt.Errorf("invalid target path %q: must be relative", rel)
+	}
+	abs := filepath.Join(base, filepath.FromSlash(rel))
+	if r, err := filepath.Rel(base, abs); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid target path %q: escapes its root", rel)
+	}
+	return abs, nil
+}
+
 func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifact, tf adapter.TargetFile, st state, pending map[string][]byte) (Item, error) {
-	abs := filepath.Join(home, filepath.FromSlash(tf.RelPath))
+	base, err := e.resolveBase(tf.Root, home)
+	if err != nil {
+		return Item{}, fmt.Errorf("%s (%s): %w", tf.RelPath, art.ID, err)
+	}
+	abs, err := joinUnder(base, tf.RelPath)
+	if err != nil {
+		return Item{}, fmt.Errorf("%s: %w", art.ID, err)
+	}
 	current, exists := pending[abs]
 	if !exists {
 		var err error
@@ -262,6 +329,7 @@ func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifac
 		op = OpUpdate
 	}
 
+	key := e.stateKey(tf.Root, tf.RelPath)
 	it := Item{
 		Agent:     agent,
 		Artifact:  art,
@@ -274,7 +342,9 @@ func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifac
 		Exists:    exists,
 		Desired:   desired,
 		Op:        op,
-		StateHash: st.get(art.ID, string(agent), tf.RelPath),
+		StateHash: st.get(art.ID, string(agent), key),
+		Root:      tf.Root,
+		StateKey:  key,
 	}
 	// A whole-file target that already exists but loadout can't prove it owns
 	// (never installed, or both store and disk moved since install) is a
@@ -357,7 +427,11 @@ func groupFragments(items []Item) map[groupKey]map[string]string {
 		if groups[key] == nil {
 			groups[key] = map[string]string{}
 		}
-		groups[key][it.RelPath] = fragmentHash(it.Merge, it.Fragment)
+		fileKey := it.StateKey
+		if fileKey == "" {
+			fileKey = it.RelPath
+		}
+		groups[key][fileKey] = fragmentHash(it.Merge, it.Fragment)
 	}
 	return groups
 }

@@ -48,7 +48,7 @@ func (a *Adapter) Detect(ctx context.Context) (adapter.Detection, error) {
 
 func (a *Adapter) Supports(kind domain.ArtifactKind) bool {
 	switch kind {
-	case domain.KindSkill, domain.KindCommand:
+	case domain.KindSkill, domain.KindCommand, domain.KindMCP:
 		return true
 	}
 	return false
@@ -64,6 +64,48 @@ func (a *Adapter) Render(art domain.Artifact, content domain.Content) ([]adapter
 		return adapter.SkillFiles("skills", art, content), nil
 	case domain.KindCommand:
 		return adapter.CommandSkillFiles("skills", art, content)
+	case domain.KindMCP:
+		return renderMCP(art, content)
 	}
 	return nil, adapter.ErrUnsupportedKind(domain.AgentCursor, art.Kind)
+}
+
+// renderMCP merges one mcpServers entry into Cursor's MCP config: user scope
+// in ~/.cursor/mcp.json, project scope in <project>/.cursor/mcp.json.
+func renderMCP(art domain.Artifact, content domain.Content) ([]adapter.TargetFile, error) {
+	spec, err := adapter.ParseMCP(art, content)
+	if err != nil {
+		return nil, err
+	}
+	server := map[string]any{}
+	switch spec.Transport {
+	case domain.MCPTransportStdio:
+		server["command"] = spec.Command
+		if len(spec.Args) > 0 {
+			server["args"] = spec.Args
+		}
+		if len(spec.Env) > 0 {
+			server["env"] = spec.Env
+		}
+	default: // http, sse — cursor takes a bare url either way
+		server["url"] = spec.URL
+		if len(spec.Headers) > 0 {
+			server["headers"] = spec.Headers
+		}
+	}
+	fragment, err := adapter.MCPServersFragment(art.ID, server)
+	if err != nil {
+		return nil, err
+	}
+	target := adapter.TargetFile{
+		RelPath: "mcp.json",
+		Content: fragment,
+		Mode:    0o644,
+		Merge:   adapter.MergeJSON,
+	}
+	if spec.Scope == domain.MCPScopeProject {
+		target.RelPath = ".cursor/mcp.json"
+		target.Root = adapter.RootProject
+	}
+	return []adapter.TargetFile{target}, nil
 }

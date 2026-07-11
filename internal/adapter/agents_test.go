@@ -12,6 +12,7 @@ import (
 
 	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/adapter/antigravity"
+	"github.com/AxeForging/loadout/internal/adapter/claudecode"
 	"github.com/AxeForging/loadout/internal/adapter/codex"
 	"github.com/AxeForging/loadout/internal/adapter/cursor"
 	"github.com/AxeForging/loadout/internal/adapter/geminicli"
@@ -123,5 +124,100 @@ func TestCursor_RendersSkillsAndCommandsOnly(t *testing.T) {
 	}
 	if a.Supports(domain.KindInstruction) {
 		t.Error("cursor global instructions (.mdc rules) are project-scoped — not supported yet")
+	}
+}
+
+// --- MCP rendering (spec 006) ---
+
+func mcpStdioContent() domain.Content {
+	return domain.Content{Files: map[string][]byte{"mcp.yaml": []byte(
+		"command: npx\nargs: [\"-y\", \"@modelcontextprotocol/server-github\"]\nenv:\n  GITHUB_TOKEN: ${GITHUB_TOKEN}\n")}}
+}
+
+func mcpRemoteContent(transport, scope string) domain.Content {
+	return domain.Content{Files: map[string][]byte{"mcp.yaml": []byte(
+		"transport: " + transport + "\nurl: https://mcp.example.com/v1\nheaders:\n  Authorization: Bearer ${EXAMPLE_KEY}\nscope: " + scope + "\n")}}
+}
+
+func TestClaudeCode_RendersMCPUserScopeIntoUserHomeClaudeJSON(t *testing.T) {
+	a := claudecode.New()
+	got, err := a.Render(domain.Artifact{ID: "github", Kind: domain.KindMCP}, mcpStdioContent())
+	if err != nil || len(got) != 1 {
+		t.Fatalf("render = %v, err %v", got, err)
+	}
+	tf := got[0]
+	if tf.RelPath != ".claude.json" || tf.Root != adapter.RootUserHome || tf.Merge != adapter.MergeJSON {
+		t.Errorf("target = %+v, want .claude.json under user home via json-merge", tf)
+	}
+	body := string(tf.Content)
+	for _, want := range []string{`"mcpServers"`, `"github"`, `"command":"npx"`, `"${GITHUB_TOKEN}"`, `"type":"stdio"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("fragment missing %s:\n%s", want, body)
+		}
+	}
+}
+
+func TestClaudeCode_RendersMCPProjectScopeIntoDotMCPJSON(t *testing.T) {
+	a := claudecode.New()
+	got, err := a.Render(domain.Artifact{ID: "search", Kind: domain.KindMCP}, mcpRemoteContent("http", "project"))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("render = %v, err %v", got, err)
+	}
+	tf := got[0]
+	if tf.RelPath != ".mcp.json" || tf.Root != adapter.RootProject {
+		t.Errorf("target = %+v, want .mcp.json under project root", tf)
+	}
+	body := string(tf.Content)
+	for _, want := range []string{`"type":"http"`, `"url":"https://mcp.example.com/v1"`, `"Bearer ${EXAMPLE_KEY}"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("fragment missing %s:\n%s", want, body)
+		}
+	}
+}
+
+func TestGeminiCLI_RendersMCPWithTransportSpecificURLKeys(t *testing.T) {
+	a := geminicli.New()
+	stdio, err := a.Render(domain.Artifact{ID: "github", Kind: domain.KindMCP}, mcpStdioContent())
+	if err != nil || stdio[0].RelPath != "settings.json" || stdio[0].Root != adapter.RootAgentHome {
+		t.Fatalf("stdio target = %v, err %v", stdio, err)
+	}
+	httpT, err := a.Render(domain.Artifact{ID: "search", Kind: domain.KindMCP}, mcpRemoteContent("http", "user"))
+	if err != nil || !strings.Contains(string(httpT[0].Content), `"httpUrl"`) {
+		t.Errorf("gemini http transport must use httpUrl: %s (err %v)", httpT[0].Content, err)
+	}
+	sseT, err := a.Render(domain.Artifact{ID: "events", Kind: domain.KindMCP}, mcpRemoteContent("sse", "project"))
+	if err != nil || !strings.Contains(string(sseT[0].Content), `"url"`) {
+		t.Errorf("gemini sse transport must use url: %s (err %v)", sseT[0].Content, err)
+	}
+	if sseT[0].RelPath != ".gemini/settings.json" || sseT[0].Root != adapter.RootProject {
+		t.Errorf("project scope target = %+v", sseT[0])
+	}
+}
+
+func TestCursor_RendersMCPBothScopes(t *testing.T) {
+	a := cursor.New()
+	user, err := a.Render(domain.Artifact{ID: "github", Kind: domain.KindMCP}, mcpStdioContent())
+	if err != nil || user[0].RelPath != "mcp.json" || user[0].Root != adapter.RootAgentHome {
+		t.Fatalf("user target = %v, err %v", user, err)
+	}
+	proj, err := a.Render(domain.Artifact{ID: "search", Kind: domain.KindMCP}, mcpRemoteContent("sse", "project"))
+	if err != nil || proj[0].RelPath != ".cursor/mcp.json" || proj[0].Root != adapter.RootProject {
+		t.Fatalf("project target = %v, err %v", proj, err)
+	}
+}
+
+func TestCodexAndAntigravity_DoNotSupportMCPYet(t *testing.T) {
+	if codex.New().Supports(domain.KindMCP) {
+		t.Error("codex config.toml needs a comment-preserving merge before MCP support — see ROADMAP")
+	}
+	if antigravity.New().Supports(domain.KindMCP) {
+		t.Error("antigravity MCP config location is unverified — see ROADMAP")
+	}
+}
+
+func TestMCPRender_RejectsLiteralSecretAtRenderTime(t *testing.T) {
+	bad := domain.Content{Files: map[string][]byte{"mcp.yaml": []byte("command: npx\nenv:\n  GITHUB_TOKEN: ghp_livetoken\n")}}
+	if _, err := claudecode.New().Render(domain.Artifact{ID: "github", Kind: domain.KindMCP}, bad); err == nil {
+		t.Fatal("render must refuse literal secrets so sync can never install them")
 	}
 }

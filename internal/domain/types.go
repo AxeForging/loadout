@@ -29,6 +29,7 @@ const (
 	KindCommand     ArtifactKind = "command"
 	KindHook        ArtifactKind = "hook"
 	KindSettings    ArtifactKind = "settings"
+	KindMCP         ArtifactKind = "mcp"
 )
 
 // TargetAll in an artifact's targets list means "every registered agent".

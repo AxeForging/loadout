@@ -32,6 +32,7 @@ const kindPaths: Record<string, string> = {
   command: "M2 2.5 L6 6 L2 9.5 M7 9.5 H11", // prompt chevron
   hook: "M8.5 1 V6 A3 3 0 0 1 2.5 6 V4.5", // J-hook
   settings: "M1 4 H11 M1 8 H11 M4 2.5 V5.5 M8 6.5 V9.5", // slider rails
+  mcp: "M6 1.5 V4 M6 8 V10.5 M1.5 6 H4 M8 6 H10.5 M6 4 A2 2 0 1 1 6 8 A2 2 0 1 1 6 4", // socket node
 };
 
 export function KindGlyph({ kind, className = "" }: { kind: string; className?: string }) {

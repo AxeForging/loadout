@@ -16,6 +16,7 @@ func syncCmd() *cli.Command {
 		ArgsUsage: "[artifact...]",
 		Flags: []cli.Flag{
 			agentFlag(),
+			projectFlag(),
 			&cli.BoolFlag{
 				Name:  "dry-run",
 				Usage: "Show the plan and exit without writing",

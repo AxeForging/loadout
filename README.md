@@ -62,11 +62,11 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout init` | Create the canonical store (git-friendly directory with a starter manifest) |
 | `loadout status [artifact...]` | Drift matrix: every artifact's sync state per agent |
 | `loadout diff [artifact...]` | Unified diffs of what sync would change |
-| `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`, `--force`) |
+| `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`, `--force`, `--project` for project-scoped MCP configs) |
 | `loadout install <agent>` | First-time full install into one agent (`--force`) |
 | `loadout restore [snapshot-id]` | List pre-write snapshots, or restore one (`--yes`) — recover files an overwrite replaced |
-| `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command` or `hook` — or draft a skill with `--ai "description"` via your logged-in agent |
-| `loadout add <path>` | Adopt an existing native artifact (skill/hook dir, command/instruction file) into the store |
+| `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command`, `hook` or `mcp` — or draft a skill with `--ai "description"` via your logged-in agent |
+| `loadout add <path>` | Adopt an existing native artifact (skill/hook/mcp dir, command/instruction file) into the store |
 | `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
 | `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
@@ -95,7 +95,8 @@ store/
 ├── instructions/*.md       # concatenated into managed blocks in CLAUDE.md etc.
 ├── commands/<name>.md      # slash-command prompts
 ├── hooks/<name>/           # hook.yaml (event/matcher/timeout) + run.sh
-└── settings/<agent>.yaml   # per-agent settings fragments (merged, never replaced)
+├── settings/<agent>.yaml   # per-agent settings fragments (merged, never replaced)
+└── mcps/<name>/mcp.yaml    # MCP server definitions (merged into each agent's native MCP config)
 ```
 
 Machine-local install state (content hashes per artifact × agent) lives separately in the platform data dir — the store repo stays shareable.
@@ -122,6 +123,38 @@ Instructions render into agents' global instruction files (e.g. `~/.claude/CLAUD
 ```
 
 Everything outside the markers is preserved byte-for-byte. Hooks and settings fragments deep-merge into `settings.json` instead of replacing it.
+
+## MCP servers — one definition, every agent
+
+Define an MCP server once and loadout merges it into each agent's native MCP config:
+
+```bash
+loadout new mcp github     # scaffolds mcps/github/mcp.yaml — edit it
+loadout sync               # merges it into every agent's MCP config (asks first)
+```
+
+```yaml
+# mcps/github/mcp.yaml
+transport: stdio            # stdio (default) | http | sse
+command: npx
+args: ["-y", "@modelcontextprotocol/server-github"]
+env:
+  GITHUB_TOKEN: ${GITHUB_TOKEN}   # placeholders only — see below
+scope: user                 # user (global config) | project
+```
+
+Where it lands (always deep-merged — only the `mcpServers.<name>` entry loadout manages is touched; your other servers and settings are preserved):
+
+| Agent | `scope: user` | `scope: project` |
+|-------|---------------|------------------|
+| Claude Code | `~/.claude.json` | `<project>/.mcp.json` |
+| Gemini CLI | `~/.gemini/settings.json` | `<project>/.gemini/settings.json` |
+| Cursor | `~/.cursor/mcp.json` | `<project>/.cursor/mcp.json` |
+| Codex / Antigravity | `n/a` for now (see ROADMAP) | — |
+
+Project scope resolves against `--project <dir>`, or the current directory when it contains a `.git` (no walk-up, no guessing — without a project root the artifact reports `n/a`).
+
+**Secrets never enter the store.** Env and header values under secret-looking keys (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*password*`, `Authorization`) must be `${VAR}` placeholders — they are written to agent configs verbatim and resolve from your environment at agent runtime. Literal values are rejected at `new`/`add`, by `loadout doctor`, at bundle import, and again at sync render time. Removing an MCP artifact clears its install record but leaves the merged JSON entry in place (same as hook settings fragments) — clean it up manually for now.
 
 ## Safety: conflicts and snapshots
 
@@ -273,13 +306,13 @@ The web UI covers the same import flow: from the dashboard's "share" section, ei
 
 ## Supported agents
 
-| Agent | Skills | Instructions | Commands | Hooks | Settings |
-|-------|--------|--------------|----------|-------|----------|
-| Claude Code | ✔ `~/.claude/skills/` | ✔ `CLAUDE.md` block | ✔ `commands/` | ✔ script + `settings.json` merge | ✔ JSON merge |
-| Codex | ✔ `~/.codex/skills/` | ✔ `AGENTS.md` block | ✔ as skill | — | — (`config.toml` merge parked: comment-preserving TOML needed) |
-| Gemini CLI | ✔ `~/.gemini/skills/` | ✔ `GEMINI.md` block | ✔ as skill | — | ✔ JSON merge |
-| Antigravity | ✔ `~/.gemini/antigravity-cli/skills/` | ✔ shared `GEMINI.md` | project-scoped (roadmap) | — | — |
-| Cursor | ✔ `~/.cursor/skills/` | project-scoped `.mdc` rules (roadmap) | ✔ as skill | — | — |
+| Agent | Skills | Instructions | Commands | Hooks | Settings | MCP |
+|-------|--------|--------------|----------|-------|----------|-----|
+| Claude Code | ✔ `~/.claude/skills/` | ✔ `CLAUDE.md` block | ✔ `commands/` | ✔ script + `settings.json` merge | ✔ JSON merge | ✔ `~/.claude.json` / `.mcp.json` |
+| Codex | ✔ `~/.codex/skills/` | ✔ `AGENTS.md` block | ✔ as skill | — | — (`config.toml` merge parked: comment-preserving TOML needed) | — (same TOML blocker) |
+| Gemini CLI | ✔ `~/.gemini/skills/` | ✔ `GEMINI.md` block | ✔ as skill | — | ✔ JSON merge | ✔ `settings.json` merge |
+| Antigravity | ✔ `~/.gemini/antigravity-cli/skills/` | ✔ shared `GEMINI.md` | project-scoped (roadmap) | — | — | — (config path unverified, roadmap) |
+| Cursor | ✔ `~/.cursor/skills/` | project-scoped `.mdc` rules (roadmap) | ✔ as skill | — | — | ✔ `mcp.json` / `.cursor/mcp.json` |
 
 Commands render "as skill" on agents whose slash commands are backed by the Agent Skills standard. Unsupported cells show as `n/a` in `loadout status` — nothing is silently skipped.
 

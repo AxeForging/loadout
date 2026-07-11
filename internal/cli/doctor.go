@@ -148,6 +148,16 @@ func checkArtifact(s storeReader, art domain.Artifact) error {
 		if _, exists := content.Files[spec.Script]; !exists {
 			return fmt.Errorf("missing script %s", spec.Script)
 		}
+	case domain.KindMCP:
+		raw, exists := content.Files["mcp.yaml"]
+		if !exists {
+			return fmt.Errorf("missing mcp.yaml")
+		}
+		// ParseMCPSpec re-runs full validation, including the literal-secret
+		// gate — doctor catches hand-edits that bypassed `loadout new`.
+		if _, err := domain.ParseMCPSpec(raw); err != nil {
+			return err
+		}
 	case domain.KindSettings:
 		if len(content.Files) == 0 {
 			return fmt.Errorf("empty settings fragment")

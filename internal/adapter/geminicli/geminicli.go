@@ -48,7 +48,7 @@ func (a *Adapter) Detect(ctx context.Context) (adapter.Detection, error) {
 
 func (a *Adapter) Supports(kind domain.ArtifactKind) bool {
 	switch kind {
-	case domain.KindSkill, domain.KindInstruction, domain.KindCommand, domain.KindSettings:
+	case domain.KindSkill, domain.KindInstruction, domain.KindCommand, domain.KindSettings, domain.KindMCP:
 		return true
 	}
 	return false
@@ -77,6 +77,54 @@ func (a *Adapter) Render(art domain.Artifact, content domain.Content) ([]adapter
 			Mode:    0o644,
 			Merge:   adapter.MergeJSON,
 		}}, nil
+	case domain.KindMCP:
+		return renderMCP(art, content)
 	}
 	return nil, adapter.ErrUnsupportedKind(domain.AgentGeminiCLI, art.Kind)
+}
+
+// renderMCP merges one mcpServers entry into Gemini CLI settings: user scope
+// in ~/.gemini/settings.json, project scope in <project>/.gemini/settings.json.
+// Gemini names the remote URL field per transport: httpUrl (http) or url (sse).
+func renderMCP(art domain.Artifact, content domain.Content) ([]adapter.TargetFile, error) {
+	spec, err := adapter.ParseMCP(art, content)
+	if err != nil {
+		return nil, err
+	}
+	server := map[string]any{}
+	switch spec.Transport {
+	case domain.MCPTransportStdio:
+		server["command"] = spec.Command
+		if len(spec.Args) > 0 {
+			server["args"] = spec.Args
+		}
+		if len(spec.Env) > 0 {
+			server["env"] = spec.Env
+		}
+	case domain.MCPTransportHTTP:
+		server["httpUrl"] = spec.URL
+		if len(spec.Headers) > 0 {
+			server["headers"] = spec.Headers
+		}
+	default: // sse
+		server["url"] = spec.URL
+		if len(spec.Headers) > 0 {
+			server["headers"] = spec.Headers
+		}
+	}
+	fragment, err := adapter.MCPServersFragment(art.ID, server)
+	if err != nil {
+		return nil, err
+	}
+	target := adapter.TargetFile{
+		RelPath: "settings.json",
+		Content: fragment,
+		Mode:    0o644,
+		Merge:   adapter.MergeJSON,
+	}
+	if spec.Scope == domain.MCPScopeProject {
+		target.RelPath = ".gemini/settings.json"
+		target.Root = adapter.RootProject
+	}
+	return []adapter.TargetFile{target}, nil
 }

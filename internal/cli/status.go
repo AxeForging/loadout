@@ -14,7 +14,7 @@ func statusCmd() *cli.Command {
 		Name:      "status",
 		Usage:     "Show the drift matrix: every artifact's sync state per agent",
 		ArgsUsage: "[artifact...]",
-		Flags:     []cli.Flag{agentFlag()},
+		Flags:     []cli.Flag{agentFlag(), projectFlag()},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			eng, err := newEngine(cmd)
 			if err != nil {

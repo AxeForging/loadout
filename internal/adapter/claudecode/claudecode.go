@@ -59,7 +59,7 @@ func (a *Adapter) Detect(ctx context.Context) (adapter.Detection, error) {
 
 func (a *Adapter) Supports(kind domain.ArtifactKind) bool {
 	switch kind {
-	case domain.KindSkill, domain.KindInstruction, domain.KindCommand, domain.KindHook, domain.KindSettings:
+	case domain.KindSkill, domain.KindInstruction, domain.KindCommand, domain.KindHook, domain.KindSettings, domain.KindMCP:
 		return true
 	}
 	return false
@@ -81,8 +81,52 @@ func (a *Adapter) Render(art domain.Artifact, content domain.Content) ([]adapter
 		return renderHook(art, content)
 	case domain.KindSettings:
 		return renderSettings(content)
+	case domain.KindMCP:
+		return renderMCP(art, content)
 	}
 	return nil, fmt.Errorf("claude-code: unsupported artifact kind %q", art.Kind)
+}
+
+// renderMCP merges one mcpServers entry into Claude Code's MCP config: the
+// user scope lives in ~/.claude.json (a sibling of the agent home, hence
+// RootUserHome), the project scope in <project>/.mcp.json.
+func renderMCP(art domain.Artifact, content domain.Content) ([]adapter.TargetFile, error) {
+	spec, err := adapter.ParseMCP(art, content)
+	if err != nil {
+		return nil, err
+	}
+	server := map[string]any{"type": spec.Transport}
+	switch spec.Transport {
+	case domain.MCPTransportStdio:
+		server["command"] = spec.Command
+		if len(spec.Args) > 0 {
+			server["args"] = spec.Args
+		}
+		if len(spec.Env) > 0 {
+			server["env"] = spec.Env
+		}
+	default: // http, sse — validated by ParseMCP
+		server["url"] = spec.URL
+		if len(spec.Headers) > 0 {
+			server["headers"] = spec.Headers
+		}
+	}
+	fragment, err := adapter.MCPServersFragment(art.ID, server)
+	if err != nil {
+		return nil, err
+	}
+	target := adapter.TargetFile{
+		RelPath: ".claude.json",
+		Content: fragment,
+		Mode:    0o644,
+		Merge:   adapter.MergeJSON,
+		Root:    adapter.RootUserHome,
+	}
+	if spec.Scope == domain.MCPScopeProject {
+		target.RelPath = ".mcp.json"
+		target.Root = adapter.RootProject
+	}
+	return []adapter.TargetFile{target}, nil
 }
 
 func renderSkill(art domain.Artifact, content domain.Content) []adapter.TargetFile {

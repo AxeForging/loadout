@@ -13,7 +13,7 @@ func diffCmd() *cli.Command {
 		Name:      "diff",
 		Usage:     "Show what sync would change, as unified diffs",
 		ArgsUsage: "[artifact...]",
-		Flags:     []cli.Flag{agentFlag()},
+		Flags:     []cli.Flag{agentFlag(), projectFlag()},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			eng, err := newEngine(cmd)
 			if err != nil {
