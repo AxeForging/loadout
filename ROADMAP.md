@@ -104,5 +104,6 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - MCP uninstall: `json-merge` removal is still unsupported, so removing an MCP artifact leaves the merged entry behind (warned, state cleared) — a keyed "remove this JSON path" removal would fix hooks-in-settings too
 - Local secret-overrides file for MCP env values (machine-local, data-dir) if the `${VAR}`-placeholder-only policy proves painful
 - Project-scoped artifacts (`.cursor/rules/*.mdc`, `.agents/{rules,workflows,skills}`, per-repo CLAUDE.md) — per-project loadout manifests; the engine-side root plumbing (`TargetFile.Root`, `--project`, root-qualified state keys) landed with spec 006
+- `loadout spec` follow-ups (spec 007 shipped the CLI + gh backend): more backends (Jira/Linear), PR <-> spec linking, spec progress in web UI/TUI
 - Self-update check (GitHub Releases + ETag, opt-in, print-only)
 - Adapter path re-verification: agent home layouts move fast; `doctor` is the runtime source of truth, docs are point-in-time (verified 2026-07-04)
