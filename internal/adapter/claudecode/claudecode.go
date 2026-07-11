@@ -95,23 +95,7 @@ func renderMCP(art domain.Artifact, content domain.Content) ([]adapter.TargetFil
 	if err != nil {
 		return nil, err
 	}
-	server := map[string]any{"type": spec.Transport}
-	switch spec.Transport {
-	case domain.MCPTransportStdio:
-		server["command"] = spec.Command
-		if len(spec.Args) > 0 {
-			server["args"] = spec.Args
-		}
-		if len(spec.Env) > 0 {
-			server["env"] = spec.Env
-		}
-	default: // http, sse — validated by ParseMCP
-		server["url"] = spec.URL
-		if len(spec.Headers) > 0 {
-			server["headers"] = spec.Headers
-		}
-	}
-	fragment, err := adapter.MCPServersFragment(art.ID, server)
+	fragment, err := adapter.MCPServersFragment(art.ID, adapter.MCPServerObject(spec, true))
 	if err != nil {
 		return nil, err
 	}

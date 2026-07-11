@@ -91,26 +91,11 @@ func renderMCP(art domain.Artifact, content domain.Content) ([]adapter.TargetFil
 	if err != nil {
 		return nil, err
 	}
-	server := map[string]any{}
-	switch spec.Transport {
-	case domain.MCPTransportStdio:
-		server["command"] = spec.Command
-		if len(spec.Args) > 0 {
-			server["args"] = spec.Args
-		}
-		if len(spec.Env) > 0 {
-			server["env"] = spec.Env
-		}
-	case domain.MCPTransportHTTP:
-		server["httpUrl"] = spec.URL
-		if len(spec.Headers) > 0 {
-			server["headers"] = spec.Headers
-		}
-	default: // sse
-		server["url"] = spec.URL
-		if len(spec.Headers) > 0 {
-			server["headers"] = spec.Headers
-		}
+	server := adapter.MCPServerObject(spec, false)
+	if spec.Transport == domain.MCPTransportHTTP {
+		// Gemini's http transport wants httpUrl, not url.
+		server["httpUrl"] = server["url"]
+		delete(server, "url")
 	}
 	fragment, err := adapter.MCPServersFragment(art.ID, server)
 	if err != nil {
