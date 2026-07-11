@@ -1,0 +1,9 @@
+# Preset: spec-driven development kit only.
+# Generates the /plan + /spec commands, the sdd-workflow skill and the sdd
+# instruction — all wired to the `loadout spec` checklist CLI (local files or
+# GitHub issues per project, see docs: sdd.yaml). Also emits the always-on
+# core/toolchain/conventions instructions (wizard baseline).
+sdd.enable: true
+sdd.style: full
+sdd.folder: docs/specs
+targets.agents: [all]

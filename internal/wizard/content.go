@@ -320,22 +320,30 @@ func planCommand(a Answers) string {
 description: Derive (or continue) a persistent, checkbox-tracked implementation plan from a spec.
 ---
 
-Target spec: the one the user points at, else the most recent file in %[1]s/.
-The plan LIVES ON DISK next to its spec as %[1]s/NNN-<name>.plan.md — it is the
-durable progress tracker that survives restarts, crashes and agent switches.
+Target spec: the one the user points at, else 'loadout spec list' shows what
+exists (most recent = highest number). The plan LIVES ON DISK next to its
+spec as %[1]s/NNN-<name>.plan.md — it is the durable progress tracker that
+survives restarts, crashes and agent switches.
 
-1. If the plan file already exists: READ it, report progress (checked vs
-   unchecked), and CONTINUE from the first unchecked step — do not regenerate.
+1. If the plan file already exists: run 'loadout spec status <NNN>' to see
+   checked vs unchecked, and CONTINUE from the first unchecked step — do not
+   regenerate.
 2. Otherwise derive the plan from the spec and WRITE the file:
    - Concrete steps in dependency order as "- [ ]" checkboxes, each small
-     enough to verify independently.
+     enough to verify independently, each carrying a stable step marker:
+     "- [ ] wire the adapter <!-- sdd:wire-adapter -->" (lowercase slug IDs,
+     unique within the spec). Mirror the same steps into the spec's
+     "## Checklist" section so 'loadout spec' can track them.
    - Per step: the files to create or modify.
    - A "Risks" section (migrations, rollback) and a "Done means" section
      (tests to add, how to verify end-to-end).
 
-While implementing, KEEP THE FILE CURRENT: check off each step ("- [x]") the
-moment it is done and verified, and append newly discovered steps instead of
-holding them in memory. Ask before deviating from the spec.
+While implementing, KEEP STATE CURRENT via the CLI — never hand-edit
+checkboxes: 'loadout spec check <NNN> <step-id>' the moment a step is done
+and verified ('uncheck' to reopen). It is idempotent and works whether the
+checklist lives in the file or a GitHub issue. Append newly discovered steps
+to the file (with new sdd markers) instead of holding them in memory. Ask
+before deviating from the spec.
 `, folder)
 }
 
@@ -346,7 +354,10 @@ func specCommand(a Answers) string {
 description: Draft a full spec (context, requirements, design, test plan, rollout) for a feature.
 ---
 
-Create %s/NNN-<short-name>.md (next free number) with sections:
+Run 'loadout spec init <short-name>' first — it claims the next free number
+and scaffolds %s/NNN-<short-name>.md (creating the tracking GitHub issue too
+when this project's sdd.yaml says backend: github). Then flesh out its
+sections:
 
 ## Context — why now, what problem, who is affected
 ## Requirements — numbered, testable statements (MUST/SHOULD)
@@ -354,6 +365,7 @@ Create %s/NNN-<short-name>.md (next free number) with sections:
 ## Design — approach, alternatives considered and why rejected
 ## Data & API changes — schemas, endpoints, migrations
 ## Test plan — per requirement, how it is verified
+## Checklist — steps as "- [ ] text <!-- sdd:step-id -->" (managed via 'loadout spec check', never hand-edited)
 ## Rollout — flags, migration order, rollback
 
 Interview me for anything ambiguous before writing. Keep requirements independently verifiable.
@@ -363,11 +375,14 @@ Interview me for anything ambiguous before writing. Keep requirements independen
 description: Draft a light spec (problem, approach, checklist) for a feature.
 ---
 
-Create %s/NNN-<short-name>.md (next free number) with sections:
+Run 'loadout spec init <short-name>' first — it claims the next free number
+and scaffolds %s/NNN-<short-name>.md (creating the tracking GitHub issue too
+when this project's sdd.yaml says backend: github). Then fill in:
 
 ## Problem — one paragraph, user-visible framing
 ## Approach — the chosen solution in a few bullets, plus what was ruled out
-## Checklist — verifiable steps to done, including tests
+## Checklist — verifiable steps to done (including tests), each line as
+   "- [ ] text <!-- sdd:step-id -->" so 'loadout spec check' can track it
 
 Ask clarifying questions first if the problem statement is ambiguous.
 `, folder)
@@ -396,15 +411,24 @@ description: The team's spec-driven development flow — when specs are required
 
 # Spec-driven development workflow
 
-1. **Spec first** — for any feature beyond a small fix, run /%[3]s to draft %[1]s/NNN-<name>.md.
+1. **Spec first** — for any feature beyond a small fix, run /%[3]s to draft %[1]s/NNN-<name>.md
+   (it uses 'loadout spec init', which also opens the tracking GitHub issue when
+   this project's sdd.yaml says backend: github).
 2. **Review** — the spec is reviewed (or waived explicitly in the PR description).
 3. **Plan on disk** — run /%[4]s: it writes %[1]s/NNN-<name>.plan.md, an ordered
-   "- [ ]" checklist. The plan file — not the conversation — is the source of
-   truth for progress.
-4. **Implement with the checklist** — check off steps as they complete and
-   append discovered steps. If reality diverges from the spec, update the spec
-   in the same PR.
-5. **PR** — reference the spec and plan files in the PR body.
+   "- [ ]" checklist whose steps carry stable "<!-- sdd:step-id -->" markers.
+   The checklist — not the conversation — is the source of truth for progress.
+4. **Implement with the completion loop** — the moment a step is done and
+   verified, run:
+
+       loadout spec check <NNN> <step-id>
+
+   It is idempotent and updates the checklist WHEREVER it lives (the spec file
+   locally, or the GitHub issue) — never hand-edit the checkboxes. Reopen with
+   'uncheck'. Append newly discovered steps to the file with new markers.
+   If reality diverges from the spec, update the spec in the same PR.
+5. **PR** — reference the spec and plan files in the PR body;
+   'loadout spec status <NNN> --require-complete' is the done gate.
 
 ## Change scope
 
@@ -412,14 +436,14 @@ description: The team's spec-driven development flow — when specs are required
 
 ## Crash / restart / agent-switch safety
 
-Because progress lives in the plan file, work is resumable by design:
+Because progress lives in the checklist (file or issue), work is resumable by design:
 - After a restart or crash, or in a different agent: run /%[6]s — it reads
-  the context handoff (if any) AND the active plan file, then continues at the
-  first unchecked step.
+  the context handoff (if any), then 'loadout spec status' to find the first
+  unchecked step, and continues there.
 - Before ending a session mid-feature, run /%[5]s and make sure the handoff
   references the active spec and plan paths.
-- Never keep plan state only in your head or the chat — if a step completed,
-  its checkbox must be checked in the file before moving on.
+- Never keep progress only in your head or the chat — if a step completed,
+  'loadout spec check' must have recorded it before moving on.
 
 Never start implementation of a large feature without a spec — if asked to, suggest drafting one with /%[3]s first.
 `, folder, workflowID, specID, planID, handoffID, resumeID, scope)

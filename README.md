@@ -72,6 +72,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
 | `loadout bundle export [--archive\|--flat]` | Export the store as a shareable directory, `.loadout.tar.gz`, or a single self-contained `.loadout.yaml` document (`--flat`) — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
 | `loadout bundle import <path>` | Validate a bundle (directory, `.tar.gz`, or flat YAML — auto-detected), show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
+| `loadout spec init\|list\|status\|check\|uncheck\|sync` | Spec-driven development: numbered specs whose checklists live in the files or in one GitHub issue per spec (`--backend github`, via your `gh` CLI). `check` is the agents' completion loop; `status --require-complete` is a CI gate |
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`). Set an optional namespace prefix so generated commands become `/af-plan`, `/af-spec`, … instead of clashing with agent built-ins like `/plan` |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
 | `loadout loadouts save\|list\|show\|switch\|rm` | Named, switchable sets of active artifacts — `switch` installs the set and removes whatever isn't in it (always asks before writing) |
@@ -205,7 +206,7 @@ updates:
 
 **Custom instructions** — the Standards station has a `standards.custom` field for house rules that don't fit the built-in questions (e.g. "always write tests before fixing a bug"). In the CLI it's a multiline field, one instruction per line; in the web Builder it's a row editor — type one, press Enter, click a row to edit it in place, delete rows individually. Any row can be saved to a store-wide **instruction library** (`store/library/instructions.yaml`) and re-added with one click in a later wizard run, so you don't retype the same house rules for every project. Library entries can be organized into **groups** (`store/library/groups.yaml`) — name a set of entries once, then add the whole set to a wizard run in one click instead of picking each individually. The web UI's **Library** page is the dedicated place to browse, search, delete, and manage groups; entries are content-addressed, so the library never offers renaming an entry in place — delete and re-add if the wording needs to change.
 
-Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
+Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web-app`, `sdd`) or `--answers answers.yaml`. Existing artifacts are never overwritten — the wizard skips them. Everything generated is plain markdown in the store — edit freely, it's yours.
 
 **Name the commands and skills yourself** — `/spec`, `/plan`, `/handoff`, `/resume` and the `sdd-workflow` skill each have a naming question (e.g. rename `sdd-workflow` to `fe-sdd-workflow` for a frontend-specific flow). Every generated cross-reference (the workflow skill mentioning `/plan`, the resume command's description, and so on) uses the name you chose — nothing is left pointing at the old one.
 
@@ -218,6 +219,27 @@ Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web
 <p align="center">
   <img src="docs/assets/sdd-demo.gif" alt="A live Claude Code session: /spec drafts a spec, /plan writes a persistent checklist to disk, the session is killed, and a brand-new session's /resume reads the same file and keeps going" width="820">
 </p>
+
+## Spec-driven development — checklists agents can't lose
+
+`loadout spec` manages numbered specs (`docs/specs/NNN-<name>.md`) whose checklist steps carry stable IDs, so completion state survives rewording, reordering, restarts and agent switches:
+
+```markdown
+- [ ] wire the adapter <!-- sdd:wire-adapter -->
+```
+
+```bash
+loadout spec init checkout-flow      # claims the next number, scaffolds the template
+loadout spec check 001 wire-adapter  # the completion loop — idempotent, byte-preserving
+loadout spec status --require-complete   # CI gate: non-zero while steps are open
+```
+
+Where the checklist lives is per-project (`docs/specs/sdd.yaml`):
+
+- **`backend: local`** (default) — state lives in the spec file itself.
+- **`backend: github`** — one tracking issue per spec; `init` opens it (repo auto-detected from `origin`, labels configurable) and `check` updates the issue body. Requires the [`gh` CLI](https://cli.github.com) — loadout shells out to it, so your existing auth just works and loadout never stores a token. `loadout spec sync` reconciles file ↔ issue: structure always flows local → GitHub, while check-state divergence is reported and only resolved with an explicit `--from-local` / `--from-github` — never guessed.
+
+The `sdd` wizard preset (`loadout wizard --preset sdd`) installs `/spec`, `/plan` and the `sdd-workflow` skill into every agent, all instructing the same loop: scaffold via `spec init`, mark steps with `spec check` the moment they're done, resume from `spec status`. One tested code path instead of four agents hand-editing checkboxes. `loadout spec` only touches project files — never the store or agent homes.
 
 ## Profiles — reuse your answers across projects and teams
 

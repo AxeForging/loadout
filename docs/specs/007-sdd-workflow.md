@@ -50,13 +50,15 @@ issue. Affected: this team first, then any loadout user who opts into the shippe
 - **R8.** `spec sync` (github backend only) MUST reconcile the issue against the local spec
   file: new/edited steps push to the issue; check-state differences are reported and resolved
   with an explicit direction flag (`--from-local` / `--from-github`) — never silently.
-- **R9.** loadout MUST ship an embedded `sdd` preset (wizard presets mechanism,
-  `loadout wizard --preset sdd`) containing: a `spec-draft` command (interview → spec via
-  `loadout spec init`), a `spec-plan` command (derive checklist steps with `sdd:` IDs), and
-  an `sdd-loop` skill instructing the agent to run `loadout spec check` immediately after
-  completing each step and to consult `loadout spec status` when resuming. These install to
-  every agent through the normal artifact pipeline — the completion loop is therefore
-  identical on claude-code, codex, gemini-cli and cursor.
+- **R9.** *(Amended during implementation — see plan.)* loadout MUST ship an embedded `sdd`
+  preset (`loadout wizard --preset sdd`). The wizard **already generates** SDD artifacts
+  behind `sdd.enable` (`spec` + `plan` commands, `sdd-workflow` skill, `sdd` instruction),
+  so instead of introducing parallel `spec-draft`/`spec-plan`/`sdd-loop` artifacts, those
+  existing generators are rewired: `/spec` scaffolds via `loadout spec init`, `/plan`
+  derives checklist steps with `sdd:` IDs, and `sdd-workflow` instructs the agent to run
+  `loadout spec check` immediately after completing each step and `loadout spec status`
+  when resuming. Installed to every agent through the normal artifact pipeline — the
+  completion loop is identical on claude-code, codex, gemini-cli and cursor.
 - **R10.** All `loadout spec` subcommands operate on the **current project** (walk up to the
   git root). They MUST NOT touch the canonical store, agent homes, or the engine — specs are
   project files; the confirm-gate machinery is not involved and no new writer into agent
@@ -64,6 +66,20 @@ issue. Affected: this team first, then any loadout user who opts into the shippe
 - **R11.** README, completion scripts and `.structlint.yaml` updated in the same PR (dev
   rules). This repo's own `docs/specs/` MUST adopt `sdd.yaml` + step IDs as the first user
   (dogfood).
+
+## Checklist
+
+Tracked via `loadout spec check 007 <step-id>` (dogfood — R11):
+
+- [x] markdown parser/mutator with fence-aware, byte-preserving SetStep <!-- sdd:parser -->
+- [x] local backend: list/resolve/create/check <!-- sdd:local-backend -->
+- [x] github backend via gh CLI: issue create/view/edit, repo autodetect <!-- sdd:github-backend -->
+- [x] `loadout spec` command group + completions <!-- sdd:cli -->
+- [x] wizard generators rewired to the CLI + `sdd` preset <!-- sdd:preset -->
+- [x] unit + integration tests green (`make ci`, `make test-integration`) <!-- sdd:tests -->
+- [x] README section + ROADMAP note <!-- sdd:docs -->
+- [ ] PR open and CI green <!-- sdd:pr -->
+
 
 ## Non-goals
 

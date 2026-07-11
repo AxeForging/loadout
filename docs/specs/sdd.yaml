@@ -1,0 +1,3 @@
+# Spec-driven development config for loadout itself (dogfood).
+# Checklists live in the spec files; `loadout spec status` shows progress.
+backend: local

@@ -43,7 +43,7 @@ func completionCmd() *cli.Command {
 const bashCompletion = `# loadout bash completion
 _loadout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="init status diff sync install restore new add source check update bundle wizard profile tui serve agents doctor version completion"
+    local commands="init status diff sync install restore new add source check update bundle spec wizard profile tui serve agents doctor version completion"
     COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
 }
 complete -F _loadout loadout
@@ -65,6 +65,7 @@ _loadout() {
         'check:Check sources for updates (non-intrusive)'
         'update:Fetch and apply source updates (gated)'
         'bundle:Export/import the store as a shareable artifact'
+        'spec:Spec-driven development checklists (files or GitHub issues)'
         'wizard:Guided builder for skills and conventions'
         'profile:Save and reuse named wizard answer sets'
         'tui:Interactive dashboard'
@@ -93,6 +94,7 @@ complete -c loadout -n '__fish_use_subcommand' -a source      -d 'Track skills f
 complete -c loadout -n '__fish_use_subcommand' -a check       -d 'Check sources for updates (non-intrusive)'
 complete -c loadout -n '__fish_use_subcommand' -a update      -d 'Fetch and apply source updates (gated)'
 complete -c loadout -n '__fish_use_subcommand' -a bundle      -d 'Export/import the store as a shareable artifact'
+complete -c loadout -n '__fish_use_subcommand' -a spec        -d 'Spec-driven development checklists (files or GitHub issues)'
 complete -c loadout -n '__fish_use_subcommand' -a wizard      -d 'Guided builder for skills and conventions'
 complete -c loadout -n '__fish_use_subcommand' -a profile     -d 'Save and reuse named wizard answer sets'
 complete -c loadout -n '__fish_use_subcommand' -a tui         -d 'Interactive dashboard'

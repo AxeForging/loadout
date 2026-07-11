@@ -70,12 +70,25 @@ func (e *env) claude(parts ...string) string {
 // run executes loadout with stdin content and returns combined output.
 func (e *env) run(stdin string, args ...string) (string, error) {
 	e.t.Helper()
+	return e.runIn("", "", stdin, args...)
+}
+
+// runIn executes loadout from dir (default: test cwd) with an optional
+// directory prepended to PATH — used to put stub binaries (e.g. a fake gh)
+// in front of the real ones.
+func (e *env) runIn(dir, pathPrepend, stdin string, args ...string) (string, error) {
+	e.t.Helper()
 	cmd := exec.Command(binary(e.t), args...)
-	cmd.Env = append(os.Environ(),
+	cmd.Dir = dir
+	environ := append(os.Environ(),
 		"HOME="+e.home,
 		"XDG_CONFIG_HOME="+filepath.Join(e.home, ".config"),
 		"XDG_DATA_HOME="+filepath.Join(e.home, ".local", "share"),
 	)
+	if pathPrepend != "" {
+		environ = append(environ, "PATH="+pathPrepend+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
+	cmd.Env = environ
 	cmd.Stdin = strings.NewReader(stdin)
 	out, err := cmd.CombinedOutput()
 	return string(out), err

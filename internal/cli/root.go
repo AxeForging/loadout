@@ -25,6 +25,7 @@ func Commands() []*cli.Command {
 		checkCmd(),
 		updateCmd(),
 		bundleCmd(),
+		specCmd(),
 		wizardCmd(),
 		profileCmd(),
 		loadoutsCmd(),
