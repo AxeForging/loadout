@@ -33,6 +33,31 @@ func TestCustomName_FallsBackOnInvalidIdentifier(t *testing.T) {
 	}
 }
 
+func TestSDDContent_GithubBackendThreadsThroughEveryArtifact(t *testing.T) {
+	a := Answers{"sdd.enable": true, "sdd.backend": "github", "sdd.folder": "docs/specs"}
+
+	if got := specCommand(a); !strings.Contains(got, "loadout spec init <short-name> --backend github") {
+		t.Errorf("spec command should init with --backend github, got:\n%s", got)
+	}
+	if got := sddInstruction(a, "spec", "plan"); !strings.Contains(got, "backend: github") {
+		t.Errorf("instruction should state the github backend, got:\n%s", got)
+	}
+	if got := sddWorkflowSkill(a, "sdd-workflow", "spec", "plan", "handoff", "resume"); !strings.Contains(got, "--backend github") {
+		t.Errorf("workflow skill should reference the github init command, got:\n%s", got)
+	}
+}
+
+func TestSDDContent_LocalBackendIsTheDefault(t *testing.T) {
+	for _, a := range []Answers{{}, {"sdd.backend": "local"}, {"sdd.backend": "jira"}} {
+		if got := specCommand(a); strings.Contains(got, "--backend github") {
+			t.Errorf("answers %v: spec command must not mention the github backend, got:\n%s", a, got)
+		}
+		if got := sddInstruction(a, "spec", "plan"); !strings.Contains(got, "backend: local") {
+			t.Errorf("answers %v: instruction should state the local backend, got:\n%s", a, got)
+		}
+	}
+}
+
 func TestChangeScopeGuidance_EachModeHasDistinctText(t *testing.T) {
 	minimal := changeScopeGuidance("minimal")
 	balanced := changeScopeGuidance("balanced")

@@ -251,6 +251,35 @@ func TestSyncApply_WritesConflictsOnlyWhenOverwriteRequested(t *testing.T) {
 	}
 }
 
+func TestAPI_WizardSchemaShipsNamePreviewData(t *testing.T) {
+	srv, _ := newTestServer(t)
+	rec, out := doJSON(t, srv.Handler(), "GET", "/api/wizard/schema", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("schema = %d: %s", rec.Code, rec.Body)
+	}
+	if out["namespacePrefixQuestionId"] != "naming.prefix" {
+		t.Errorf("namespacePrefixQuestionId = %v", out["namespacePrefixQuestionId"])
+	}
+	reserved, ok := out["reservedCommandNames"].([]any)
+	if !ok || len(reserved) == 0 {
+		t.Fatalf("reservedCommandNames = %v, want non-empty list", out["reservedCommandNames"])
+	}
+	// The builder previews install names from the namespaced flag — make sure
+	// it survives JSON serialization on at least one name question.
+	found := false
+	for _, s := range out["sections"].([]any) {
+		for _, q := range s.(map[string]any)["questions"].([]any) {
+			qm := q.(map[string]any)
+			if qm["id"] == "sdd.planCommandName" && qm["namespaced"] == true {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("sdd.planCommandName should be serialized with namespaced: true")
+	}
+}
+
 func TestWizardPlan_ReturnsReservedNameWarnings(t *testing.T) {
 	srv, _ := newTestServer(t)
 	// sdd.enable produces a /plan command, which shadows Claude Code's built-in.

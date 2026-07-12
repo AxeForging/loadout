@@ -29,7 +29,7 @@ func customName(a Answers, id, def string) string {
 // applying the same lenient validation as customName — an absent or invalid
 // prefix yields "" (no prefixing).
 func namespacePrefix(a Answers) string {
-	if v := strings.TrimSpace(a.Str("naming.prefix")); v != "" && store.ValidateName(v) == nil {
+	if v := strings.TrimSpace(a.Str(NamespacePrefixQuestionID)); v != "" && store.ValidateName(v) == nil {
 		return v
 	}
 	return ""
@@ -303,12 +303,36 @@ func dockerSkill(a Answers) string {
 	return b.String()
 }
 
+// sddBackend resolves where spec checklists are tracked: "github" (one
+// tracking issue per spec via the gh CLI) or "local" (inside the spec files),
+// defaulting to local for absent or unknown answers.
+func sddBackend(a Answers) string {
+	if a.Str("sdd.backend") == "github" {
+		return "github"
+	}
+	return "local"
+}
+
+// sddInitCommand is the exact first command a spec starts with — on the
+// github backend the flag records backend: github in sdd.yaml on first use.
+func sddInitCommand(a Answers) string {
+	if sddBackend(a) == "github" {
+		return "loadout spec init <short-name> --backend github"
+	}
+	return "loadout spec init <short-name>"
+}
+
 func sddInstruction(a Answers, specID, planID string) string {
 	folder := a.Str("sdd.folder")
 	var b strings.Builder
 	b.WriteString("# Spec-driven development\n\n")
 	fmt.Fprintf(&b, "Non-trivial features start with a spec in `%s/` before any code. Use `/%s` to draft one and `/%s` to derive the implementation plan.\n\n", folder, specID, planID)
 	fmt.Fprintf(&b, "- Specs are numbered: `%s/NNN-short-name.md`.\n", folder)
+	if sddBackend(a) == "github" {
+		b.WriteString("- Spec checklists are tracked in GitHub issues (`sdd.yaml`: `backend: github`) — the first `loadout spec init --backend github` in a repo records it; requires an authenticated `gh` CLI.\n")
+	} else {
+		b.WriteString("- Spec checklists live inside the spec files (`backend: local`, the default) — managed via `loadout spec check`, never hand-edited.\n")
+	}
 	b.WriteString("- A spec must be reviewed (or explicitly waived) before implementation.\n")
 	b.WriteString("- The plan references the spec; the PR references both.\n")
 	return b.String()
@@ -347,6 +371,18 @@ before deviating from the spec.
 `, folder)
 }
 
+// sddInitNote explains what the init command does on the chosen backend —
+// injected right after the init command in both spec templates.
+func sddInitNote(a Answers) string {
+	if sddBackend(a) == "github" {
+		return `it claims the next free number,
+scaffolds the spec file and opens the tracking GitHub issue (the first run
+records backend: github in sdd.yaml; requires an authenticated 'gh' CLI).`
+	}
+	return `it claims the next free number
+and scaffolds the spec file (checklists live in the file — backend: local).`
+}
+
 func specCommand(a Answers) string {
 	folder := a.Str("sdd.folder")
 	if a.Str("sdd.style") == "full" {
@@ -354,9 +390,8 @@ func specCommand(a Answers) string {
 description: Draft a full spec (context, requirements, design, test plan, rollout) for a feature.
 ---
 
-Run 'loadout spec init <short-name>' first — it claims the next free number
-and scaffolds %s/NNN-<short-name>.md (creating the tracking GitHub issue too
-when this project's sdd.yaml says backend: github). Then flesh out its
+Run '%[2]s' first — %[3]s
+The spec lands at %[1]s/NNN-<short-name>.md. Then flesh out its
 sections:
 
 ## Context — why now, what problem, who is affected
@@ -369,15 +404,14 @@ sections:
 ## Rollout — flags, migration order, rollback
 
 Interview me for anything ambiguous before writing. Keep requirements independently verifiable.
-`, folder)
+`, folder, sddInitCommand(a), sddInitNote(a))
 	}
 	return fmt.Sprintf(`---
 description: Draft a light spec (problem, approach, checklist) for a feature.
 ---
 
-Run 'loadout spec init <short-name>' first — it claims the next free number
-and scaffolds %s/NNN-<short-name>.md (creating the tracking GitHub issue too
-when this project's sdd.yaml says backend: github). Then fill in:
+Run '%[2]s' first — %[3]s
+The spec lands at %[1]s/NNN-<short-name>.md. Then fill in:
 
 ## Problem — one paragraph, user-visible framing
 ## Approach — the chosen solution in a few bullets, plus what was ruled out
@@ -385,7 +419,7 @@ when this project's sdd.yaml says backend: github). Then fill in:
    "- [ ] text <!-- sdd:step-id -->" so 'loadout spec check' can track it
 
 Ask clarifying questions first if the problem statement is ambiguous.
-`, folder)
+`, folder, sddInitCommand(a), sddInitNote(a))
 }
 
 // changeScopeGuidance describes how aggressively implementation should
@@ -404,6 +438,10 @@ func changeScopeGuidance(mode string) string {
 func sddWorkflowSkill(a Answers, workflowID, specID, planID, handoffID, resumeID string) string {
 	folder := a.Str("sdd.folder")
 	scope := changeScopeGuidance(a.Str("sdd.changeScope"))
+	backendNote := "checklists live inside the spec files (backend: local)"
+	if sddBackend(a) == "github" {
+		backendNote = "it opens the tracking GitHub issue; the first run records backend: github in sdd.yaml and needs an authenticated 'gh' CLI"
+	}
 	return fmt.Sprintf(`---
 name: %[2]s
 description: The team's spec-driven development flow — when specs are required, where specs and their persistent plans live, and how /%[3]s, /%[4]s, /%[5]s and /%[6]s chain together. Use when starting any non-trivial feature or resuming one.
@@ -412,8 +450,7 @@ description: The team's spec-driven development flow — when specs are required
 # Spec-driven development workflow
 
 1. **Spec first** — for any feature beyond a small fix, run /%[3]s to draft %[1]s/NNN-<name>.md
-   (it uses 'loadout spec init', which also opens the tracking GitHub issue when
-   this project's sdd.yaml says backend: github).
+   (it uses '%[8]s' — %[9]s).
 2. **Review** — the spec is reviewed (or waived explicitly in the PR description).
 3. **Plan on disk** — run /%[4]s: it writes %[1]s/NNN-<name>.plan.md, an ordered
    "- [ ]" checklist whose steps carry stable "<!-- sdd:step-id -->" markers.
@@ -446,7 +483,7 @@ Because progress lives in the checklist (file or issue), work is resumable by de
   'loadout spec check' must have recorded it before moving on.
 
 Never start implementation of a large feature without a spec — if asked to, suggest drafting one with /%[3]s first.
-`, folder, workflowID, specID, planID, handoffID, resumeID, scope)
+`, folder, workflowID, specID, planID, handoffID, resumeID, scope, sddInitCommand(a), backendNote)
 }
 
 func testingInstruction(a Answers) string {

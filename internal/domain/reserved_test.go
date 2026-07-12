@@ -14,6 +14,21 @@ func TestReservedNameWarning_FlagsClaudeCodeBuiltins(t *testing.T) {
 	}
 }
 
+func TestReservedCommandNames_SortedAndConsistentWithWarnings(t *testing.T) {
+	names := ReservedCommandNames()
+	if len(names) == 0 {
+		t.Fatal("expected a non-empty reserved list")
+	}
+	for i, n := range names {
+		if i > 0 && names[i-1] >= n {
+			t.Errorf("list not sorted: %q before %q", names[i-1], n)
+		}
+		if ReservedNameWarning(KindCommand, n) == "" {
+			t.Errorf("listed name %q should also warn via ReservedNameWarning", n)
+		}
+	}
+}
+
 func TestReservedNameWarning_AllowsPrefixedAndUnknownNames(t *testing.T) {
 	for _, name := range []string{"my-plan", "af-review", "handoff", "commit-and-pr", "linting"} {
 		if got := ReservedNameWarning(KindCommand, name); got != "" {

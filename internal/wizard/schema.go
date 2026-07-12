@@ -26,7 +26,15 @@ type Question struct {
 	Type    QuestionType `json:"type" yaml:"type"`
 	Options []Option     `json:"options,omitempty" yaml:"options,omitempty"`
 	Default any          `json:"default,omitempty" yaml:"default,omitempty"`
+	// Namespaced marks command/skill name questions whose default gets the
+	// NamespacePrefixQuestionID answer prepended (an explicit rename wins
+	// verbatim) — surfaces use it to preview the resolved install name.
+	Namespaced bool `json:"namespaced,omitempty" yaml:"namespaced,omitempty"`
 }
+
+// NamespacePrefixQuestionID is the question whose answer prefixes every
+// Namespaced name left at its default (e.g. "af" → /af-plan).
+const NamespacePrefixQuestionID = "naming.prefix"
 
 type Section struct {
 	ID        string     `json:"id" yaml:"id"`
@@ -59,7 +67,7 @@ func Sections() []Section {
 			Title: "Naming — avoid clashing with agent built-ins",
 			Questions: []Question{
 				{
-					ID:      "naming.prefix",
+					ID:      NamespacePrefixQuestionID,
 					Prompt:  "Optional namespace prefix for generated commands/skills (e.g. \"af\" → /af-plan, /af-spec). Leave empty for none.",
 					Type:    TypeText,
 					Default: "",
@@ -138,9 +146,17 @@ func Sections() []Section {
 					Options: opts("light", "Light — problem, approach, checklist", "full", "Full — context, requirements, design, test plan, rollout"),
 					Default: "light",
 				},
-				{ID: "sdd.specCommandName", Prompt: "Name for the spec-drafting command (default: spec; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "spec"},
-				{ID: "sdd.planCommandName", Prompt: "Name for the plan command (default: plan; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "plan"},
-				{ID: "sdd.workflowSkillName", Prompt: "Name for the SDD workflow skill (default: sdd-workflow; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "sdd-workflow"},
+				{
+					ID: "sdd.backend", Prompt: "Where do spec checklists live?", Type: TypeSelect,
+					Options: opts(
+						"local", "Local files — checklists tracked inside docs/specs/*.md",
+						"github", "GitHub issues — one tracking issue per spec, via the gh CLI",
+					),
+					Default: "local",
+				},
+				{ID: "sdd.specCommandName", Prompt: "Name for the spec-drafting command (default: spec; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "spec", Namespaced: true},
+				{ID: "sdd.planCommandName", Prompt: "Name for the plan command (default: plan; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "plan", Namespaced: true},
+				{ID: "sdd.workflowSkillName", Prompt: "Name for the SDD workflow skill (default: sdd-workflow; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "sdd-workflow", Namespaced: true},
 				{
 					ID: "sdd.changeScope", Prompt: "How aggressively should implementation change the codebase?", Type: TypeSelect,
 					Options: opts(
@@ -193,8 +209,8 @@ func Sections() []Section {
 					Prompt: "Enable cross-agent context handoff (/handoff dumps session state to .agents/context/, /resume picks it up — works across agents and restarts)?",
 					Type:   TypeBool, Default: true,
 				},
-				{ID: "continuity.handoffCommandName", Prompt: "Name for the handoff command (default: handoff; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "handoff"},
-				{ID: "continuity.resumeCommandName", Prompt: "Name for the resume command (default: resume; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "resume"},
+				{ID: "continuity.handoffCommandName", Prompt: "Name for the handoff command (default: handoff; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "handoff", Namespaced: true},
+				{ID: "continuity.resumeCommandName", Prompt: "Name for the resume command (default: resume; the namespace prefix applies unless you set a custom name)", Type: TypeText, Default: "resume", Namespaced: true},
 			},
 		},
 		{

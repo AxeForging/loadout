@@ -94,6 +94,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/library/groups", s.handleLibraryGroupsList)
 	s.mux.HandleFunc("POST /api/library/groups", s.handleLibraryGroupSave)
 	s.mux.HandleFunc("DELETE /api/library/groups/{name}", s.handleLibraryGroupDelete)
+	s.mux.HandleFunc("GET /api/mcp", s.handleMCPList)
+	s.mux.HandleFunc("POST /api/mcp", s.handleMCPCreate)
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)
@@ -446,7 +448,14 @@ func (s *Server) handleSourcesCheck(w http.ResponseWriter, r *http.Request) {
 // ---- wizard ----
 
 func (s *Server) handleWizardSchema(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, wizard.Sections())
+	// Alongside the questionnaire, ship what the builder needs to preview
+	// resolved command/skill names live: which question holds the namespace
+	// prefix, and which names would shadow an agent built-in.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"sections":                  wizard.Sections(),
+		"namespacePrefixQuestionId": wizard.NamespacePrefixQuestionID,
+		"reservedCommandNames":      domain.ReservedCommandNames(),
+	})
 }
 
 func (s *Server) handleWizardPresets(w http.ResponseWriter, r *http.Request) {

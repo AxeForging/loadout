@@ -55,9 +55,33 @@ export type WizardQuestion = {
   type: "select" | "multi" | "text" | "bool" | "list";
   options?: WizardOption[];
   default?: unknown;
+  /** Name question whose default gets the namespace prefix prepended (an explicit rename wins verbatim). */
+  namespaced?: boolean;
 };
 export type WizardSection = { id: string; title: string; questions: WizardQuestion[] };
+export type WizardSchema = {
+  sections: WizardSection[];
+  namespacePrefixQuestionId: string;
+  reservedCommandNames: string[];
+};
 export type Answers = Record<string, unknown>;
+
+export type MCPSpec = {
+  transport: "stdio" | "http" | "sse";
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  scope: "user" | "project";
+};
+export type MCPServer = {
+  id: string;
+  path: string;
+  origin: string;
+  spec?: MCPSpec;
+  error?: string;
+};
 
 export type LibraryEntry = { id: string; text: string; createdAt: string };
 export type LibraryGroup = { name: string; entryIds: string[]; createdAt: string };
@@ -147,7 +171,7 @@ export const api = {
   sourcesAdd: (input: { name?: string; url: string; ref?: string; subdir?: string }) =>
     request<SourceAddResult>("/api/sources/add", { method: "POST", body: JSON.stringify(input) }),
   sourcesCheck: () => request<SourceCheck[]>("/api/sources/check", { method: "POST", body: "{}" }),
-  wizardSchema: () => request<WizardSection[]>("/api/wizard/schema"),
+  wizardSchema: () => request<WizardSchema>("/api/wizard/schema"),
   wizardPresets: () => request<string[]>("/api/wizard/presets"),
   wizardPlan: (answers: Answers, preset?: string) =>
     request<{ create: string[]; skip: string[]; warnings: string[] }>("/api/wizard/plan", {
@@ -168,6 +192,12 @@ export const api = {
     }),
   deleteProfile: (name: string) =>
     request<{ removed: boolean }>(`/api/profiles/${name}`, { method: "DELETE" }),
+  mcpList: () => request<MCPServer[]>("/api/mcp"),
+  mcpCreate: (input: { name: string } & Partial<MCPSpec>) =>
+    request<{ id: string; path: string }>("/api/mcp", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   libraryInstructions: () => request<LibraryEntry[]>("/api/library/instructions"),
   libraryAdd: (text: string) =>
     request<LibraryEntry>("/api/library/instructions", {
