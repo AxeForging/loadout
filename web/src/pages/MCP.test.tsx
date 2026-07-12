@@ -21,6 +21,8 @@ vi.mock("../api", async () => {
       ...actual.api,
       mcpList: vi.fn(),
       mcpCreate: vi.fn(),
+      mcpAgents: vi.fn(),
+      mcpAdopt: vi.fn(),
     },
   };
 });
@@ -64,6 +66,12 @@ function renderPage() {
 beforeEach(() => {
   vi.mocked(api.mcpList).mockResolvedValue(sampleServers);
   vi.mocked(api.mcpCreate).mockResolvedValue({ id: "github", path: "mcps/github" });
+  vi.mocked(api.mcpAgents).mockResolvedValue([]);
+  vi.mocked(api.mcpAdopt).mockResolvedValue({
+    id: "my-github",
+    path: "mcps/my-github",
+    maskedKeys: ["GITHUB_TOKEN"],
+  });
 });
 
 describe("MCPPage", () => {
@@ -102,6 +110,35 @@ describe("MCPPage", () => {
       env: { GH_TOKEN: "${GH_PAT}" },
     });
     expect(await screen.findByText(/run a sync to install/)).toBeInTheDocument();
+  });
+
+  it("lists unmanaged agent servers and adopts one with masked secrets", async () => {
+    const unmanaged = [
+      {
+        agent: "claude-code",
+        name: "My_GitHub",
+        storeName: "my-github",
+        file: "/home/u/.claude.json",
+        maskedKeys: ["GITHUB_TOKEN"],
+        spec: {
+          transport: "stdio" as const,
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-github"],
+          env: { GITHUB_TOKEN: "${GITHUB_TOKEN}" },
+          scope: "user" as const,
+        },
+      },
+    ];
+    vi.mocked(api.mcpAgents).mockResolvedValue(unmanaged);
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("My_GitHub")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Adopt as my-github" }));
+
+    expect(api.mcpAdopt).toHaveBeenCalledWith("claude-code", "My_GitHub");
+    expect(await screen.findByText(/adopted/)).toBeInTheDocument();
+    expect(screen.getByText("GITHUB_TOKEN")).toBeInTheDocument();
   });
 
   it("shows the backend's teaching error when a literal secret is rejected", async () => {

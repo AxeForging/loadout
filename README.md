@@ -136,6 +136,8 @@ loadout sync               # merges it into every agent's MCP config (asks first
 
 Prefer a form over YAML? The web UI (`loadout serve`) has a dedicated **MCP** page: pick the transport, fill command/args or URL, add `${VAR}`-placeholder env/headers, and it lands in the store with the same validation — installing into agents still goes through the gated sync.
 
+The same page also lists MCP servers **already configured in your agents' own configs** that loadout doesn't manage yet, and adopts them into the store in one click (read-only on the agent file — sync takes over afterwards). Literal secret values found in an agent config are converted to `${VAR}` placeholders during adoption and never enter the store or even the browser: the page tells you which variables to export instead.
+
 ```yaml
 # mcps/github/mcp.yaml
 transport: stdio            # stdio (default) | http | sse
@@ -212,7 +214,7 @@ Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web
 
 **Name the commands and skills yourself** — `/spec`, `/plan`, `/handoff`, `/resume` and the `sdd-workflow` skill each have a naming question (e.g. rename `sdd-workflow` to `fe-sdd-workflow` for a frontend-specific flow). Every generated cross-reference (the workflow skill mentioning `/plan`, the resume command's description, and so on) uses the name you chose — nothing is left pointing at the old one.
 
-**Namespace prefix** — the Naming station asks for an optional prefix (e.g. `af`) that's applied to every *defaulted* command/skill name at once: `/plan` → `/af-plan`, `/spec` → `/af-spec`, and so on. This keeps generated commands from clashing with agents' built-in slash commands like `/plan`. An explicit per-name rename always wins over the prefix. Whenever a generated (or scaffolded, or imported) command/skill name would shadow a built-in, loadout prints an advisory `!` warning — in the wizard, `loadout new`, `loadout bundle import`, and `loadout doctor` — but never blocks it: shadowing is allowed when you mean to.
+**Namespace prefix — safe by default** — the Naming station's prefix defaults to `ld`, so an untouched questionnaire generates `/ld-plan`, `/ld-spec`, `/ld-handoff`, … and never masks an agent's built-in `/plan` or `/resume` by accident. Set your own prefix (e.g. `af` → `/af-plan`) or clear it for bare names — the prefix applies to every *defaulted* command/skill name at once, and an explicit per-name rename always wins over it. The web Builder shows the exact resolved name live under each field (`→ installs as /ld-plan`). Whenever a generated (or scaffolded, or imported) command/skill name would shadow a built-in, loadout prints an advisory `!` warning — in the wizard, `loadout new`, `loadout bundle import`, and `loadout doctor` — but never blocks it: shadowing is allowed when you mean to. (Dot names like `ld.plan` aren't possible — agents only accept lowercase letters, digits and dashes.)
 
 **Tell it how aggressively to change your codebase** — `sdd.changeScope` (minimal / balanced / thorough) becomes a "Change scope" section in the generated `sdd-workflow` skill: *minimal* scopes every change to the fewest files, insists on reusing existing code over duplicating it, and favors several small reviewable PRs; *thorough* allows broader changes when they clearly help; *balanced* (default) is the middle ground.
 

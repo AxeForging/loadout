@@ -82,6 +82,14 @@ export type MCPServer = {
   spec?: MCPSpec;
   error?: string;
 };
+export type UnmanagedMCP = {
+  agent: string;
+  name: string;
+  storeName: string;
+  spec: MCPSpec;
+  file: string;
+  maskedKeys?: string[];
+};
 
 export type LibraryEntry = { id: string; text: string; createdAt: string };
 export type LibraryGroup = { name: string; entryIds: string[]; createdAt: string };
@@ -197,6 +205,12 @@ export const api = {
     request<{ id: string; path: string }>("/api/mcp", {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+  mcpAgents: () => request<UnmanagedMCP[]>("/api/mcp/agents"),
+  mcpAdopt: (agent: string, name: string) =>
+    request<{ id: string; path: string; maskedKeys?: string[] }>("/api/mcp/adopt", {
+      method: "POST",
+      body: JSON.stringify({ agent, name }),
     }),
   libraryInstructions: () => request<LibraryEntry[]>("/api/library/instructions"),
   libraryAdd: (text: string) =>

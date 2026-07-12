@@ -101,3 +101,52 @@ func TestParseMCPSpec_SecretGate(t *testing.T) {
 		}
 	}
 }
+
+func TestMaskSecretValues_ReplacesLiteralsWithPlaceholders(t *testing.T) {
+	spec := MCPSpec{
+		Transport: MCPTransportHTTP,
+		URL:       "https://mcp.example.com",
+		Env:       map[string]string{"API_TOKEN": "sk-live-1234", "MODE": "fast"},
+		Headers:   map[string]string{"Authorization": "Bearer abc123", "X-Trace": "on"},
+		Scope:     MCPScopeUser,
+	}
+	masked, keys := spec.MaskSecretValues()
+
+	if masked.Env["API_TOKEN"] != "${API_TOKEN}" {
+		t.Errorf("env literal not masked: %q", masked.Env["API_TOKEN"])
+	}
+	if masked.Headers["Authorization"] != "${AUTHORIZATION}" {
+		t.Errorf("header literal not masked: %q", masked.Headers["Authorization"])
+	}
+	// Non-secret values survive untouched.
+	if masked.Env["MODE"] != "fast" || masked.Headers["X-Trace"] != "on" {
+		t.Errorf("non-secret values changed: %v %v", masked.Env, masked.Headers)
+	}
+	if len(keys) != 2 || keys[0] != "API_TOKEN" || keys[1] != "AUTHORIZATION" {
+		t.Errorf("masked keys = %v, want sorted [API_TOKEN AUTHORIZATION]", keys)
+	}
+	// The original spec is untouched (defensive copies).
+	if spec.Env["API_TOKEN"] != "sk-live-1234" {
+		t.Error("MaskSecretValues mutated its receiver")
+	}
+	// A masked spec passes the store's secret gate.
+	if err := masked.validate(); err != nil {
+		t.Errorf("masked spec should validate, got %v", err)
+	}
+}
+
+func TestMaskSecretValues_KeepsExistingPlaceholders(t *testing.T) {
+	spec := MCPSpec{
+		Transport: MCPTransportStdio,
+		Command:   "npx",
+		Env:       map[string]string{"GH_TOKEN": "${GH_PAT}"},
+		Scope:     MCPScopeUser,
+	}
+	masked, keys := spec.MaskSecretValues()
+	if masked.Env["GH_TOKEN"] != "${GH_PAT}" {
+		t.Errorf("existing placeholder rewritten: %q", masked.Env["GH_TOKEN"])
+	}
+	if len(keys) != 0 {
+		t.Errorf("nothing should be reported masked, got %v", keys)
+	}
+}

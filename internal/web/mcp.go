@@ -121,6 +121,105 @@ const mcpFileHeader = `# Canonical MCP server definition (created via the loadou
 # the environment at agent runtime, so the store stays shareable.
 `
 
+type unmanagedMCPJSON struct {
+	Agent      string       `json:"agent"`
+	Name       string       `json:"name"`
+	StoreName  string       `json:"storeName"`
+	Spec       *mcpSpecJSON `json:"spec"`
+	File       string       `json:"file"`
+	MaskedKeys []string     `json:"maskedKeys,omitempty"`
+}
+
+// handleMCPAgents lists MCP servers found in installed agents' native configs
+// that the store does not manage — the adopt candidates. Secret-looking
+// literal values were masked to ${VAR} placeholders during discovery; they
+// never reach the browser.
+func (s *Server) handleMCPAgents(w http.ResponseWriter, r *http.Request) {
+	found, err := s.opts.Engine.DiscoverUnmanagedMCP(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	out := []unmanagedMCPJSON{}
+	for _, u := range found {
+		out = append(out, unmanagedMCPJSON{
+			Agent:      string(u.Agent),
+			Name:       u.Name,
+			StoreName:  storeNameFor(u.Name),
+			Spec:       specToJSON(u.Spec),
+			File:       u.File,
+			MaskedKeys: u.MaskedKeys,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleMCPAdopt copies one discovered agent-config entry into the store as a
+// canonical MCP artifact. Store write only; the agent config is not touched —
+// after adopting, sync manages the entry like any other artifact.
+func (s *Server) handleMCPAdopt(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Agent string `json:"agent"`
+		Name  string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	found, err := s.opts.Engine.DiscoverUnmanagedMCP(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, u := range found {
+		if string(u.Agent) != req.Agent || u.Name != req.Name {
+			continue
+		}
+		raw, err := yaml.Marshal(u.Spec)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		art, err := s.opts.Engine.Store.CreateMCP(storeNameFor(u.Name), []byte(mcpFileHeader+string(raw)))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":         art.ID,
+			"path":       art.Path,
+			"maskedKeys": u.MaskedKeys,
+		})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{
+		"error": "no unmanaged MCP server " + req.Name + " on " + req.Agent + " — it may already be adopted",
+	})
+}
+
+// storeNameFor maps an agent-config server name onto a valid store artifact
+// ID: lowercase letters/digits/dashes, no leading/trailing dash.
+func storeNameFor(raw string) string {
+	out := make([]rune, 0, len(raw))
+	lastDash := true // swallow leading dashes
+	for _, r := range strings.ToLower(raw) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			out = append(out, r)
+			lastDash = false
+		default:
+			if !lastDash {
+				out = append(out, '-')
+				lastDash = true
+			}
+		}
+	}
+	for len(out) > 0 && out[len(out)-1] == '-' {
+		out = out[:len(out)-1]
+	}
+	return string(out)
+}
+
 // dropEmptyPairs removes entries whose key or value trimmed to nothing —
 // blank form rows must not become "": "" pairs in a committed mcp.yaml.
 func dropEmptyPairs(m map[string]string) map[string]string {

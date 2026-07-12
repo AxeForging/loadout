@@ -96,6 +96,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/library/groups/{name}", s.handleLibraryGroupDelete)
 	s.mux.HandleFunc("GET /api/mcp", s.handleMCPList)
 	s.mux.HandleFunc("POST /api/mcp", s.handleMCPCreate)
+	s.mux.HandleFunc("GET /api/mcp/agents", s.handleMCPAgents)
+	s.mux.HandleFunc("POST /api/mcp/adopt", s.handleMCPAdopt)
 	s.mux.HandleFunc("POST /api/wizard/plan", s.handleWizardPlan)
 	s.mux.HandleFunc("POST /api/wizard/generate", s.handleWizardGenerate)
 	s.mux.HandleFunc("GET /api/bundle/export", s.handleBundleExport)

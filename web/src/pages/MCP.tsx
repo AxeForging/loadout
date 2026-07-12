@@ -23,22 +23,115 @@ export function MCPPage() {
 
       <AddServerForm onAdded={() => void queryClient.invalidateQueries({ queryKey: ["mcp"] })} />
 
-      {servers.isLoading ? (
-        <p className="mt-10 text-sm text-ink-faint">Loading…</p>
-      ) : (servers.data ?? []).length === 0 ? (
-        <p className="mt-10 max-w-[65ch] text-sm text-ink-dim">
-          No MCP servers defined yet — add one above, or scaffold from the CLI with{" "}
-          <code className="font-mono text-xs text-ink">loadout new mcp &lt;name&gt;</code>. After
-          adding, the pending-changes bar offers the gated sync into your agents.
+      <section className="mt-10">
+        <h2 className="crate">in the store</h2>
+        {servers.isLoading ? (
+          <p className="mt-3 text-sm text-ink-faint">Loading…</p>
+        ) : (servers.data ?? []).length === 0 ? (
+          <p className="mt-3 max-w-[65ch] text-sm text-ink-dim">
+            No MCP servers defined yet — add one above, adopt one from an agent below, or scaffold
+            from the CLI with{" "}
+            <code className="font-mono text-xs text-ink">loadout new mcp &lt;name&gt;</code>. After
+            adding, the pending-changes bar offers the gated sync into your agents.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-line border-y border-line">
+            {(servers.data ?? []).map((s, i) => (
+              <ServerRow key={s.id} server={s} index={i} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <AgentServers />
+    </div>
+  );
+}
+
+// Servers already configured in this machine's agents that the store does not
+// manage — one click brings a definition under loadout's wing (store write
+// only; the agent file is never touched, and literal secrets arrive already
+// converted to ${VAR} placeholders).
+function AgentServers() {
+  const queryClient = useQueryClient();
+  const found = useQuery({ queryKey: ["mcp-agents"], queryFn: api.mcpAgents });
+  const adopt = useMutation({
+    mutationFn: ({ agent, name }: { agent: string; name: string }) => api.mcpAdopt(agent, name),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["mcp"] });
+      void queryClient.invalidateQueries({ queryKey: ["mcp-agents"] });
+    },
+  });
+
+  const rows = found.data ?? [];
+
+  return (
+    <section className="mt-12">
+      <h2 className="crate">already on this machine</h2>
+      <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-ink-dim">
+        MCP servers found in your agents' own configs that loadout doesn't manage yet. Adopt one to
+        make the store its source of truth — then every agent gets it on sync.
+      </p>
+      {found.isLoading ? (
+        <p className="mt-3 text-sm text-ink-faint">Scanning agent configs…</p>
+      ) : rows.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-faint">
+          Nothing unmanaged — every server your agents know is already in the store (or no agent
+          config exists yet).
         </p>
       ) : (
-        <ul className="mt-10 divide-y divide-line border-y border-line">
-          {(servers.data ?? []).map((s, i) => (
-            <ServerRow key={s.id} server={s} index={i} />
+        <ul className="mt-3 divide-y divide-line border-y border-line">
+          {rows.map((u, i) => (
+            <li
+              key={`${u.agent}/${u.name}`}
+              className="wipe flex items-center gap-4 py-3"
+              style={{ "--i": i } as CSSProperties}
+            >
+              <span className="w-44 truncate font-mono text-sm text-ink" title={u.name}>
+                {u.name}
+              </span>
+              <span className="w-24 font-mono text-[11px] text-drift">{u.agent}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-faint">
+                {u.spec.transport === "stdio"
+                  ? [u.spec.command, ...(u.spec.args ?? [])].join(" ")
+                  : u.spec.url}
+              </span>
+              {(u.maskedKeys ?? []).length > 0 ? (
+                <span
+                  className="font-mono text-[11px] text-warn"
+                  title={`Literal secrets become placeholders: ${(u.maskedKeys ?? []).join(", ")}`}
+                >
+                  {(u.maskedKeys ?? []).length} secret → {"${VAR}"}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => adopt.mutate({ agent: u.agent, name: u.name })}
+                disabled={adopt.isPending}
+                className="btn-outline"
+              >
+                Adopt{u.storeName !== u.name ? ` as ${u.storeName}` : ""}
+              </button>
+            </li>
           ))}
         </ul>
       )}
-    </div>
+      {adopt.isError ? (
+        <p className="stamp mt-2 text-xs text-danger">{String(adopt.error)}</p>
+      ) : adopt.isSuccess ? (
+        <p className="stamp mt-2 text-xs text-sync">
+          ■ adopted <span className="font-mono">{adopt.data.id}</span> into the store
+          {(adopt.data.maskedKeys ?? []).length > 0 ? (
+            <>
+              {" "}
+              — export{" "}
+              <span className="font-mono text-warn">{(adopt.data.maskedKeys ?? []).join(", ")}</span>{" "}
+              in your shell; the literal value stayed out of the store
+            </>
+          ) : null}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
