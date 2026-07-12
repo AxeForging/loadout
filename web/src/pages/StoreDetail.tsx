@@ -42,7 +42,7 @@ export function StoreDetail() {
         ) : null}
       </header>
 
-      <div className="rise border border-line" style={{ "--i": 2 } as CSSProperties}>
+      <div className="rise overflow-hidden rounded-2xl border border-line" style={{ "--i": 2 } as CSSProperties}>
         {/* file rail: folder-tab strip on top of the sheet */}
         <div className="flex flex-wrap items-center border-b border-line bg-surface/60">
           {paths.map((p) => (

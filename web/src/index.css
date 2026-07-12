@@ -1,84 +1,68 @@
-@import "@fontsource/chakra-petch/500.css";
-@import "@fontsource/chakra-petch/600.css";
-@import "@fontsource/chakra-petch/700.css";
-@import "@fontsource/schibsted-grotesk/400.css";
-@import "@fontsource/schibsted-grotesk/500.css";
-@import "@fontsource/schibsted-grotesk/700.css";
-@import "@fontsource/red-hat-mono/400.css";
-@import "@fontsource/red-hat-mono/500.css";
+/* AxeForge kit fonts, self-hosted so the embedded UI works offline
+   (replaces the kit's Google Fonts @import — see axeforge.css header). */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
 @import "tailwindcss";
+@import "./axeforge.css";
 
-@theme {
-  --font-display: "Chakra Petch", ui-sans-serif, sans-serif;
-  --font-sans: "Schibsted Grotesk", system-ui, sans-serif;
-  --font-mono: "Red Hat Mono", ui-monospace, monospace;
+/* loadout's semantic tokens, remapped onto the AxeForge shell + forge flavor.
+   `inline` so utilities emit var(--af-*) directly and a <html data-flavor>
+   switch would still win. "ember" is loadout's name for the flavor accent —
+   keep using it in components; only this block knows what it resolves to. */
+@theme inline {
+  --font-display: var(--af-font-sans);
+  --font-sans: var(--af-font-sans);
+  --font-mono: var(--af-font-mono);
 
-  /* Warm-steel darks, tinted toward the forge hue (~60). */
-  --color-bg: oklch(0.155 0.009 60);
-  --color-bg-deep: oklch(0.125 0.008 60);
-  --color-surface: oklch(0.19 0.011 60);
-  --color-raised: oklch(0.225 0.012 60);
-  --color-line: oklch(0.285 0.014 60);
-  --color-line-strong: oklch(0.38 0.016 60);
+  --color-bg: var(--af-bg);
+  --color-bg-deep: var(--af-bg);
+  --color-surface: var(--af-surface);
+  --color-raised: var(--af-surface-3);
+  --color-line: var(--af-line);
+  --color-line-strong: color-mix(in srgb, var(--af-line) 55%, var(--af-text-muted));
 
-  --color-ink: oklch(0.93 0.008 75);
-  --color-ink-dim: oklch(0.67 0.014 70);
-  --color-ink-faint: oklch(0.5 0.014 70);
+  --color-ink: var(--af-text);
+  --color-ink-dim: var(--af-text-muted);
+  --color-ink-faint: color-mix(in srgb, var(--af-text-muted) 55%, var(--af-bg));
 
-  /* Ember — rare, for action and attention. */
-  --color-ember: oklch(0.74 0.14 55);
-  --color-ember-bright: oklch(0.8 0.15 60);
-  --color-ember-dim: oklch(0.4 0.07 55);
-  --color-ember-faint: oklch(0.24 0.03 55);
+  /* Ember — rare, for action and attention (the forge accent).
+     "bright" lightens the accent for hover TEXT on dark surfaces; button
+     backgrounds hover with the kit's --af-accent-hover instead. */
+  --color-ember: var(--af-accent);
+  --color-ember-bright: color-mix(in srgb, var(--af-accent) 78%, white);
+  --color-ember-dim: color-mix(in srgb, var(--af-accent) 45%, var(--af-bg));
+  --color-ember-faint: color-mix(in srgb, var(--af-accent) 14%, var(--af-bg));
 
-  /* Sync states. */
-  --color-sync: oklch(0.74 0.1 150);
-  --color-sync-dim: oklch(0.34 0.045 150);
-  --color-warn: oklch(0.79 0.11 85);
-  --color-warn-dim: oklch(0.35 0.05 85);
-  --color-drift: oklch(0.74 0.08 235);
-  --color-drift-dim: oklch(0.33 0.04 235);
-  --color-danger: oklch(0.68 0.15 25);
-  --color-danger-dim: oklch(0.32 0.06 25);
+  /* Sync states — tool-owned semantics, hues anchored to the kit's
+     terminal-dot green/red plus amber (warn) and blue (info/drift). */
+  --color-sync: #27c93f;
+  --color-sync-dim: color-mix(in srgb, #27c93f 26%, var(--af-bg));
+  --color-warn: #ffbd2e;
+  --color-warn-dim: color-mix(in srgb, #ffbd2e 26%, var(--af-bg));
+  --color-drift: #58a6ff;
+  --color-drift-dim: color-mix(in srgb, #58a6ff 26%, var(--af-bg));
+  --color-danger: #ff5f56;
+  --color-danger-dim: color-mix(in srgb, #ff5f56 26%, var(--af-bg));
 }
 
 :root {
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --grid-line: oklch(0.32 0.014 60 / 0.1);
 }
 
 html {
-  background: var(--color-bg);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
+  background: var(--af-bg);
   font-size: 15px;
-  color-scheme: dark;
-}
-
-/* Blueprint drafting grid + forge glow bleeding in from the top-left. */
-body {
-  min-height: 100vh;
-  background:
-    radial-gradient(70rem 40rem at -8% -12%, oklch(0.24 0.035 55 / 0.55), transparent 62%),
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size:
-    auto,
-    46px 46px,
-    46px 46px;
-  background-attachment: fixed;
 }
 
 ::selection {
-  background: var(--color-ember-dim);
-  color: var(--color-ink);
-}
-
-:focus-visible {
-  outline: 1px solid var(--color-ember);
-  outline-offset: 2px;
+  background: color-mix(in srgb, var(--af-accent) 35%, var(--af-bg));
+  color: var(--af-text);
 }
 
 ::-webkit-scrollbar {
@@ -86,13 +70,13 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-line);
+  background: var(--af-line);
   border: 3px solid transparent;
   background-clip: content-box;
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-line-strong);
+  background: color-mix(in srgb, var(--af-line) 55%, var(--af-text-muted));
   border: 3px solid transparent;
   background-clip: content-box;
 }
@@ -234,7 +218,7 @@ body {
   position: absolute;
   width: 8px;
   height: 8px;
-  border: 1px solid var(--color-ember);
+  border: 1px solid var(--af-accent);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -246,6 +230,7 @@ body {
   left: 0;
   border-right: 0;
   border-bottom: 0;
+  border-top-left-radius: var(--af-radius);
   transform: translate(4px, 4px);
 }
 .brk::after {
@@ -253,6 +238,7 @@ body {
   right: 0;
   border-left: 0;
   border-top: 0;
+  border-bottom-right-radius: var(--af-radius);
   transform: translate(-4px, -4px);
 }
 .brk:hover::before,
@@ -265,7 +251,7 @@ body {
 
 /* Stencilled overline label — crate lettering. */
 .crate {
-  font-family: var(--font-mono);
+  font-family: var(--af-font-mono);
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -284,12 +270,15 @@ body {
 
 /* ---------------------------------------------------------------- controls */
 
+/* Compact variants of the kit's .axe-button: same tokens (accent bg,
+   accent-contrast text, --af-radius, hover darkens, active scales),
+   sized for a dense tool UI. */
 .btn-ember {
-  border-radius: 2px;
-  background: var(--color-ember);
-  color: var(--color-bg-deep);
-  font-family: var(--font-display);
-  font-weight: 600;
+  border-radius: var(--af-radius);
+  background: var(--af-accent);
+  color: var(--af-accent-contrast);
+  font-family: var(--af-font-sans);
+  font-weight: 700;
   font-size: 0.875rem;
   padding: 0.42rem 1.1rem;
   transition:
@@ -297,7 +286,7 @@ body {
     transform 0.1s var(--ease-out-quart);
 }
 .btn-ember:hover {
-  background: var(--color-ember-bright);
+  background: var(--af-accent-hover);
 }
 .btn-ember:active {
   transform: scale(0.97);
@@ -308,11 +297,11 @@ body {
 }
 
 .btn-outline {
-  border-radius: 2px;
+  border-radius: var(--af-radius);
   border: 1px solid var(--color-ember-dim);
-  color: var(--color-ember);
-  font-family: var(--font-display);
-  font-weight: 500;
+  color: var(--af-accent);
+  font-family: var(--af-font-sans);
+  font-weight: 600;
   font-size: 0.875rem;
   padding: 0.42rem 1.1rem;
   transition:
@@ -321,8 +310,7 @@ body {
     transform 0.1s var(--ease-out-quart);
 }
 .btn-outline:hover {
-  border-color: var(--color-ember);
-  color: var(--color-ember-bright);
+  border-color: var(--af-accent);
 }
 .btn-outline:active {
   transform: scale(0.97);
@@ -333,10 +321,11 @@ body {
 }
 
 .btn-ghost {
-  border-radius: 2px;
+  border-radius: var(--af-radius);
   border: 1px solid var(--color-line-strong);
   color: var(--color-ink-dim);
-  font-family: var(--font-display);
+  font-family: var(--af-font-sans);
+  font-weight: 500;
   font-size: 0.875rem;
   padding: 0.42rem 0.9rem;
   transition:
@@ -357,8 +346,8 @@ body {
 }
 
 .chip {
-  border-radius: 2px;
-  border: 1px solid var(--color-line);
+  border-radius: var(--af-radius);
+  border: 1px solid var(--af-line);
   color: var(--color-ink-dim);
   font-size: 0.85rem;
   padding: 0.2rem 0.75rem;
@@ -378,18 +367,17 @@ body {
 .chip[data-on="true"] {
   border-color: var(--color-ember-dim);
   background: var(--color-ember-faint);
-  color: var(--color-ember-bright);
+  color: var(--af-accent);
 }
 
 .field {
-  border-radius: 2px;
-  border: 1px solid var(--color-line);
-  background: oklch(0.17 0.01 60);
+  border-radius: var(--af-radius);
+  border: 1px solid var(--af-line);
+  background: var(--af-surface);
   padding: 0.42rem 0.75rem;
-  font-family: var(--font-mono);
+  font-family: var(--af-font-mono);
   font-size: 0.875rem;
-  color: var(--color-ink);
-  outline: none;
+  color: var(--af-text);
   transition: border-color 0.15s linear;
 }
 .field::placeholder {
@@ -397,7 +385,43 @@ body {
 }
 .field:focus {
   border-color: var(--color-ember-dim);
-  outline: none;
+}
+
+/* Two-step delete: a quiet bordered ✕ that arms into an explicit confirm —
+   destructive intent is always visible, never a bare glyph floating in space. */
+.btn-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: var(--af-radius);
+  border: 1px solid var(--af-line);
+  color: var(--color-ink-faint);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 0.28rem 0.5rem;
+  transition:
+    border-color 0.15s linear,
+    color 0.15s linear,
+    background 0.15s linear;
+}
+.btn-x:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.btn-x[data-armed="true"] {
+  border-color: var(--color-danger);
+  background: var(--color-danger-dim);
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+/* Scroll without chrome — the topbar nav on narrow viewports. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Numerals line up on the readiness board and ledgers. */

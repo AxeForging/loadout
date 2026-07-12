@@ -280,7 +280,7 @@ export function ExportPage() {
       </div>
 
       {format === "flat" && flatYaml ? (
-        <div className="rise mt-4 border border-line-strong bg-raised p-4">
+        <div className="rise mt-4 rounded-2xl border border-line-strong bg-raised p-4">
           <div className="flex items-center justify-between">
             <p className="font-display text-xs font-semibold uppercase tracking-wider text-ink-dim">
               export.loadout.yaml
@@ -306,7 +306,7 @@ export function ExportPage() {
             readOnly
             value={flatYaml}
             rows={16}
-            className="mt-3 w-full resize-y overflow-x-auto border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed"
+            className="mt-3 w-full resize-y overflow-x-auto rounded-lg border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed"
           />
         </div>
       ) : null}

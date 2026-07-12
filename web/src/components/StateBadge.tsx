@@ -58,7 +58,7 @@ export function KindGlyph({ kind, className = "" }: { kind: string; className?: 
 
 export function KindTag({ kind }: { kind: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-xs border border-line px-1.5 py-0.5 font-mono text-[11px] text-ink-dim">
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-line px-1.5 py-0.5 font-mono text-[11px] text-ink-dim">
       <KindGlyph kind={kind} className="text-ink-faint" />
       {kind}
     </span>

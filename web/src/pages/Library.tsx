@@ -113,9 +113,9 @@ export function LibraryPage() {
       ) : filtered.length === 0 ? (
         <p className="mt-6 text-sm text-ink-faint">Nothing matches "{search}".</p>
       ) : (
-        <ul className="mt-4 space-y-1 border-y border-line py-2">
+        <ul className="mt-4 divide-y divide-line border-y border-line">
           {filtered.map((entry) => (
-            <li key={entry.id} className="flex items-start gap-3 py-1 font-mono text-sm text-ink">
+            <li key={entry.id} className="flex items-start gap-3 py-2.5 font-mono text-sm text-ink">
               <span className="min-w-0 flex-1 whitespace-normal break-words">{entry.text}</span>
               <button
                 type="button"
@@ -126,11 +126,8 @@ export function LibraryPage() {
                 aria-label={
                   entryDelete.confirmingId === entry.id ? `confirm delete ${entry.text}` : `delete ${entry.text}`
                 }
-                className={
-                  entryDelete.confirmingId === entry.id
-                    ? "shrink-0 font-medium text-danger"
-                    : "shrink-0 text-xs text-ink-faint transition-colors hover:text-danger"
-                }
+                data-armed={entryDelete.confirmingId === entry.id}
+                className="btn-x"
               >
                 {entryDelete.confirmingId === entry.id ? "confirm ×" : "×"}
               </button>
@@ -195,8 +192,8 @@ export function LibraryPage() {
         ) : (
           <ul className="mt-3 space-y-3">
             {(groups.data ?? []).map((group) => (
-              <li key={group.name} className="border border-line-strong bg-raised p-3">
-                <div className="flex items-center justify-between gap-3">
+              <li key={group.name} className="rounded-lg border border-line-strong bg-raised p-3">
+                <div className="flex items-center justify-between gap-3 border-b border-line pb-2.5">
                   <span className="font-mono text-sm text-ink">
                     {group.name} <span className="text-ink-faint">({group.entryIds.length})</span>
                   </span>
@@ -211,18 +208,15 @@ export function LibraryPage() {
                         ? `confirm delete group ${group.name}`
                         : `delete group ${group.name}`
                     }
-                    className={
-                      groupDelete.confirmingId === group.name
-                        ? "shrink-0 font-medium text-danger"
-                        : "shrink-0 text-xs text-ink-faint transition-colors hover:text-danger"
-                    }
+                    data-armed={groupDelete.confirmingId === group.name}
+                    className="btn-x"
                   >
                     {groupDelete.confirmingId === group.name ? "confirm ×" : "×"}
                   </button>
                 </div>
-                <ul className="mt-2 space-y-1 font-mono text-xs text-ink-dim">
+                <ul className="divide-y divide-line font-mono text-xs text-ink-dim">
                   {group.entryIds.map((id) => (
-                    <li key={id} className="break-words">
+                    <li key={id} className="break-words py-1.5">
                       {textFor(id)}
                     </li>
                   ))}

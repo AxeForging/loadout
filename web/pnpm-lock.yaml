@@ -8,14 +8,11 @@ importers:
 
   .:
     dependencies:
-      '@fontsource/chakra-petch':
-        specifier: ^5.2.5
-        version: 5.2.7
-      '@fontsource/red-hat-mono':
-        specifier: ^5.2.5
+      '@fontsource/inter':
+        specifier: ^5.2.8
         version: 5.2.8
-      '@fontsource/schibsted-grotesk':
-        specifier: ^5.2.5
+      '@fontsource/jetbrains-mono':
+        specifier: ^5.2.8
         version: 5.2.8
       '@tanstack/react-query':
         specifier: ^5.80.0
@@ -379,14 +376,11 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@fontsource/chakra-petch@5.2.7':
-    resolution: {integrity: sha512-GLbun5WZJNAEc8FtWxwcgo+4Kurqdwejvf671l+YfIjyQgPvTjyxXYP7Ffg2HAY89NGnp3oOvKQjRzfm/fBECw==}
+  '@fontsource/inter@5.2.8':
+    resolution: {integrity: sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg==}
 
-  '@fontsource/red-hat-mono@5.2.8':
-    resolution: {integrity: sha512-KiP2OqXbsDAoz6kDNTRjcepp+EeuqxcC2+EWj0MJW3ulpqEA1L5G31KmTRgmnpfxMTqYEESCj99Ldd4rBmC6Xg==}
-
-  '@fontsource/schibsted-grotesk@5.2.8':
-    resolution: {integrity: sha512-CyyDW5aS89oKGFAVndOsJTQ5pqzKuPnSKWjrdJdMT5TD/eA2JyWapUBhvy6X/lqqrB/GNk74PIff7coPifeVyg==}
+  '@fontsource/jetbrains-mono@5.2.8':
+    resolution: {integrity: sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1573,11 +1567,9 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@fontsource/chakra-petch@5.2.7': {}
+  '@fontsource/inter@5.2.8': {}
 
-  '@fontsource/red-hat-mono@5.2.8': {}
-
-  '@fontsource/schibsted-grotesk@5.2.8': {}
+  '@fontsource/jetbrains-mono@5.2.8': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

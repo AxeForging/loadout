@@ -112,7 +112,7 @@ function AddSourceForm({ onAdded }: { onAdded: () => void }) {
   });
 
   return (
-    <div className="rise brk border border-line p-5" data-active="false">
+    <div className="rise brk rounded-lg border border-line p-5" data-active="false">
       <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-ink">
         Add a source
       </h2>

@@ -10,9 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fontsource/chakra-petch": "^5.2.5",
-    "@fontsource/red-hat-mono": "^5.2.5",
-    "@fontsource/schibsted-grotesk": "^5.2.5",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@tanstack/react-query": "^5.80.0",
     "@tanstack/react-router": "^1.120.0",
     "react": "^19.1.0",

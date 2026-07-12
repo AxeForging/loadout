@@ -42,7 +42,7 @@ export function SyncDock() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-10">
       <div className="mx-auto max-w-6xl px-6 pb-5">
-        <div className="dock-up rounded-xs border border-line-strong bg-raised shadow-[0_-12px_48px_oklch(0.08_0.01_60/0.7)]">
+        <div className="dock-up rounded-2xl border border-line-strong bg-raised shadow-[0_-12px_48px_rgb(0_0_0/0.6)]">
           {applied !== null && !plan ? (
             <div className="flex items-center justify-between px-5 py-3">
               <p className="stamp text-sm text-sync">
