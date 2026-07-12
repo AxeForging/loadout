@@ -53,7 +53,7 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 - ✅ `loadout bundle export [--archive]` — one shareable artifact of the whole setup (git-friendly dir by default, `.loadout.tar.gz` optional)
 - ✅ `bundle.yaml` metadata + the store tree (manifest, artifacts, sources.lock) — sources not registered locally are merged on import
 - ✅ `loadout bundle import <path>` — schema validation, merge plan summary, permission-gated apply with conflict policy (`skip` default, `overwrite` opt-in); archive extraction rejects path traversal
-- ⏳ import from URL and a `rename` conflict policy — deferred
+- ⏳ import from URL and a `rename` conflict policy — deferred; extend rename into an **import-time namespace prefix** (`<prefix>-` applied to command/skill IDs on import so a shared loadout never collides with the receiver's names — needs cross-reference rewriting inside generated content, so it's a spec of its own)
 - ⏳ `skillsStrategy: shared-agents-dir` (carried from M3) — install skills once into `~/.agents/skills/` for Cursor + Gemini CLI
 
 ## M5 — Builder wizard ✅ (v0.5.0)

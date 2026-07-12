@@ -88,6 +88,43 @@ func TestNew_HookScaffoldsSpecAndExecutableScript(t *testing.T) {
 	}
 }
 
+func TestCreateMCP_WritesValidatedYAMLAndRegisters(t *testing.T) {
+	s := testStore(t)
+	yaml := "transport: stdio\ncommand: npx\nargs: [\"-y\", \"@x/y\"]\nscope: user\n"
+	a, err := s.CreateMCP("context7", []byte(yaml))
+	if err != nil {
+		t.Fatalf("CreateMCP() error = %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(s.Root, "mcps", "context7", "mcp.yaml"))
+	if err != nil {
+		t.Fatalf("mcp.yaml not created: %v", err)
+	}
+	if string(raw) != yaml {
+		t.Errorf("mcp.yaml content changed on write:\n%s", raw)
+	}
+	if a.Kind != domain.KindMCP {
+		t.Errorf("kind = %q, want mcp", a.Kind)
+	}
+	if _, found := s.Artifact("context7"); !found {
+		t.Error("artifact not registered in manifest")
+	}
+}
+
+func TestCreateMCP_RejectsInvalidSpecBeforeTouchingDisk(t *testing.T) {
+	s := testStore(t)
+	// A literal secret must never land in a shareable store.
+	bad := "transport: http\nurl: https://x\nheaders:\n  Authorization: Bearer sk-live-123\n"
+	if _, err := s.CreateMCP("leaky", []byte(bad)); err == nil {
+		t.Fatal("literal secret should fail, got nil")
+	}
+	if _, err := os.Stat(filepath.Join(s.Root, "mcps", "leaky")); !os.IsNotExist(err) {
+		t.Error("rejected MCP left files on disk")
+	}
+	if _, err := s.CreateMCP("no-command", []byte("transport: stdio\n")); err == nil {
+		t.Fatal("stdio without command should fail, got nil")
+	}
+}
+
 func TestNew_RejectsDuplicateID(t *testing.T) {
 	s := testStore(t)
 	if _, err := s.New(domain.KindSkill, "dup"); err != nil {

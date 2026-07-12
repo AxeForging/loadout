@@ -134,6 +134,8 @@ loadout new mcp github     # scaffolds mcps/github/mcp.yaml — edit it
 loadout sync               # merges it into every agent's MCP config (asks first)
 ```
 
+Prefer a form over YAML? The web UI (`loadout serve`) has a dedicated **MCP** page: pick the transport, fill command/args or URL, add `${VAR}`-placeholder env/headers, and it lands in the store with the same validation — installing into agents still goes through the gated sync.
+
 ```yaml
 # mcps/github/mcp.yaml
 transport: stdio            # stdio (default) | http | sse
@@ -241,6 +243,8 @@ Where the checklist lives is per-project (`docs/specs/sdd.yaml`):
 
 The `sdd` wizard preset (`loadout wizard --preset sdd`) installs `/spec`, `/plan` and the `sdd-workflow` skill into every agent, all instructing the same loop: scaffold via `spec init`, mark steps with `spec check` the moment they're done, resume from `spec status`. One tested code path instead of four agents hand-editing checkboxes. `loadout spec` only touches project files — never the store or agent homes.
 
+The wizard's spec-driven section also asks **where spec checklists live** (`sdd.backend`: local files or GitHub issues) — the generated `/spec` command, `sdd` instruction and workflow skill then all point at the matching `loadout spec init` invocation (`--backend github` when the team tracks specs in issues), in the CLI questionnaire and the web Builder alike.
+
 ## Profiles — reuse your answers across projects and teams
 
 Presets (`go-cli`, `web-app`) are built in and read-only. Profiles are yours: save any wizard run's answers under a name, reuse them for the next repo, or commit them so your whole team starts from the same conventions.
@@ -294,7 +298,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, the **Builder** — the wizard as a multi-step form, a dedicated **Library** page for browsing/searching/deleting custom instructions and managing groups, and a dedicated **Export** page for picking exactly what to share. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install), wearing the AxeForge family look (forge flavor): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), a dedicated **MCP** page for defining MCP servers as store artifacts (transport, `${VAR}`-placeholder env/headers — literal secrets are rejected before anything is written), one-click bundle export and import, the **Builder** — the wizard as a multi-step form where every command/skill name question shows a live "installs as `/name`" preview (namespace prefix applied, built-in shadowing flagged), a dedicated **Library** page for browsing/searching/deleting custom instructions and managing groups, and a dedicated **Export** page for picking exactly what to share. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 
