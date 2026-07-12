@@ -1,16 +1,44 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type SyncPlan } from "../api";
+import { api, type Diff, type SyncPlan } from "../api";
+import { DiffView } from "./DiffView";
+
+// The expanded body of a requisition row: the unified diff apply would write.
+function RowDiff({ loading, diffs }: { loading: boolean; diffs: Diff[] }) {
+  if (loading) {
+    return <p className="px-1 py-2 font-mono text-xs text-ink-faint">Computing diff…</p>;
+  }
+  if (diffs.length === 0) {
+    return (
+      <p className="px-1 py-2 font-mono text-xs text-ink-faint">
+        No content diff to show — likely a merge fragment (settings/MCP) or an identical file.
+      </p>
+    );
+  }
+  return (
+    <div className="mb-2 mt-1 space-y-2 px-1">
+      {diffs.map((d) => (
+        <DiffView key={d.relPath} diff={d.diff} />
+      ))}
+    </div>
+  );
+}
+
+// One reviewable row of the requisition ledger, addressed by what makes it
+// unique on disk: which agent and which target file.
+type RowKey = { agent: string; artifact: string; relPath: string };
 
 // The gated-sync ritual, docked at the bottom of every page: a persistent
 // pending indicator → explicit "review" (plan + token) → explicit "apply".
-// Staged like a requisition slip: ledger of ops, plan token as the stamp.
+// Staged like a requisition slip: ledger of ops, plan token as the stamp —
+// and every row expands to the exact diff it would write.
 export function SyncDock() {
   const queryClient = useQueryClient();
   const [plan, setPlan] = useState<SyncPlan | null>(null);
   const [applied, setApplied] = useState<number | null>(null);
   const [overwrite, setOverwrite] = useState(false);
+  const [openRow, setOpenRow] = useState<RowKey | null>(null);
 
   const overview = useQuery({ queryKey: ["overview"], queryFn: api.overview });
 
@@ -20,6 +48,7 @@ export function SyncDock() {
       setPlan(p);
       setApplied(null);
       setOverwrite(false);
+      setOpenRow(null);
     },
   });
   const applyMutation = useMutation({
@@ -28,9 +57,31 @@ export function SyncDock() {
     onSuccess: (res) => {
       setApplied(res.applied);
       setPlan(null);
+      setOpenRow(null);
       void queryClient.invalidateQueries();
     },
   });
+
+  // The expanded row's diff — same endpoint the drift matrix uses, so the
+  // dock shows exactly what apply would write, not a summary of it.
+  const rowDiff = useQuery({
+    queryKey: ["dock-diff", openRow?.agent, openRow?.artifact],
+    queryFn: () => api.diff({ artifact: openRow!.artifact, agent: openRow!.agent }),
+    enabled: openRow !== null,
+  });
+
+  const sameRow = (a: RowKey, b: RowKey | null) =>
+    b !== null && a.agent === b.agent && a.artifact === b.artifact && a.relPath === b.relPath;
+
+  const toggleRow = (key: RowKey) => setOpenRow((cur) => (sameRow(key, cur) ? null : key));
+
+  // Prefer the diff for the row's own file; fall back to everything the
+  // artifact would change on that agent rather than showing nothing.
+  const diffsForOpenRow = () => {
+    const all = rowDiff.data ?? [];
+    const matching = all.filter((d) => d.relPath === openRow?.relPath);
+    return matching.length > 0 ? matching : all;
+  };
 
   const pending = overview.data?.pending ?? 0;
   const pendingConflicts = overview.data?.conflicts ?? 0;
@@ -66,37 +117,71 @@ export function SyncDock() {
                   plan <span className="text-ember">{plan.token.slice(0, 8)}</span>
                 </p>
               </div>
-              <ul className="mt-3 max-h-44 space-y-1 overflow-y-auto pr-1">
-                {plan.changes.map((c, i) => (
-                  <li
-                    key={i}
-                    className="rise flex items-center gap-3 font-mono text-xs"
-                    style={{ "--i": Math.min(i, 10) } as CSSProperties}
-                  >
-                    <span
-                      className={`w-16 whitespace-nowrap ${c.op === "create" ? "text-sync" : "text-warn"}`}
+              <ul className={`mt-3 space-y-1 overflow-y-auto pr-1 ${openRow ? "max-h-[45vh]" : "max-h-44"}`}>
+                {plan.changes.map((c, i) => {
+                  const key: RowKey = { agent: c.agent, artifact: c.artifact, relPath: c.relPath };
+                  const isOpen = sameRow(key, openRow);
+                  return (
+                    <li key={i} className="rise" style={{ "--i": Math.min(i, 10) } as CSSProperties}>
+                      <button
+                        type="button"
+                        onClick={() => toggleRow(key)}
+                        aria-expanded={isOpen}
+                        title="show the exact diff this would write"
+                        className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 text-left font-mono text-xs transition-colors hover:bg-surface/60"
+                      >
+                        <span
+                          className={`w-16 whitespace-nowrap ${c.op === "create" ? "text-sync" : "text-warn"}`}
+                        >
+                          {c.op === "create" ? "+ new" : "~ " + c.op}
+                        </span>
+                        <span className="text-ink-dim">{c.agent}</span>
+                        <span className="min-w-0 flex-1 truncate text-ink">{c.relPath}</span>
+                        <span className="text-ink-faint">{c.artifact}</span>
+                        <span
+                          aria-hidden
+                          className={`text-[10px] text-ink-faint transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                        >
+                          ▸
+                        </span>
+                      </button>
+                      {isOpen ? <RowDiff loading={rowDiff.isLoading} diffs={diffsForOpenRow()} /> : null}
+                    </li>
+                  );
+                })}
+                {conflicts.map((c, i) => {
+                  const key: RowKey = { agent: c.agent, artifact: c.artifact, relPath: c.relPath };
+                  const isOpen = sameRow(key, openRow);
+                  return (
+                    <li
+                      key={`conflict-${i}`}
+                      className="rise"
+                      style={{ "--i": Math.min(plan.changes.length + i, 10) } as CSSProperties}
                     >
-                      {c.op === "create" ? "+ new" : "~ " + c.op}
-                    </span>
-                    <span className="text-ink-dim">{c.agent}</span>
-                    <span className="min-w-0 flex-1 truncate text-ink">{c.relPath}</span>
-                    <span className="text-ink-faint">{c.artifact}</span>
-                  </li>
-                ))}
-                {conflicts.map((c, i) => (
-                  <li
-                    key={`conflict-${i}`}
-                    className="rise flex items-center gap-3 font-mono text-xs"
-                    style={{ "--i": Math.min(plan.changes.length + i, 10) } as CSSProperties}
-                  >
-                    <span className="w-16 whitespace-nowrap text-danger">
-                      {overwrite ? "! force" : "! skip"}
-                    </span>
-                    <span className="text-ink-dim">{c.agent}</span>
-                    <span className="min-w-0 flex-1 truncate text-ink">{c.relPath}</span>
-                    <span className="text-ink-faint">{c.artifact}</span>
-                  </li>
-                ))}
+                      <button
+                        type="button"
+                        onClick={() => toggleRow(key)}
+                        aria-expanded={isOpen}
+                        title="show the exact diff overwriting would write"
+                        className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 text-left font-mono text-xs transition-colors hover:bg-surface/60"
+                      >
+                        <span className="w-16 whitespace-nowrap text-danger">
+                          {overwrite ? "! force" : "! skip"}
+                        </span>
+                        <span className="text-ink-dim">{c.agent}</span>
+                        <span className="min-w-0 flex-1 truncate text-ink">{c.relPath}</span>
+                        <span className="text-ink-faint">{c.artifact}</span>
+                        <span
+                          aria-hidden
+                          className={`text-[10px] text-ink-faint transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                        >
+                          ▸
+                        </span>
+                      </button>
+                      {isOpen ? <RowDiff loading={rowDiff.isLoading} diffs={diffsForOpenRow()} /> : null}
+                    </li>
+                  );
+                })}
               </ul>
               {conflicts.length > 0 ? (
                 <label className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-xs text-ink-dim">

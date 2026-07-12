@@ -139,6 +139,8 @@ describe("MCPPage", () => {
     expect(api.mcpAdopt).toHaveBeenCalledWith("claude-code", "My_GitHub");
     expect(await screen.findByText(/adopted/)).toBeInTheDocument();
     expect(screen.getByText("GITHUB_TOKEN")).toBeInTheDocument();
+    // Renamed adoption is honest about the leftover entry in the agent config.
+    expect(screen.getByText(/original/)).toBeInTheDocument();
   });
 
   it("shows the backend's teaching error when a literal secret is rejected", async () => {

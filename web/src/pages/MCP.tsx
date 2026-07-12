@@ -129,6 +129,13 @@ function AgentServers() {
               in your shell; the literal value stayed out of the store
             </>
           ) : null}
+          {adopt.variables && adopt.variables.name !== adopt.data.id ? (
+            <span className="text-ink-dim">
+              {" "}
+              — the agent's original <span className="font-mono">{adopt.variables.name}</span> entry
+              stays in its config; remove it there once the synced one works
+            </span>
+          ) : null}
         </p>
       ) : null}
     </section>
