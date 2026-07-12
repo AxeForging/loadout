@@ -101,7 +101,7 @@ func TestJSONMerge_PreservesUnrelatedKeyOrderAndFormatting(t *testing.T) {
 	idxUser := strings.Index(s, `"userID"`)
 	idxProjects := strings.Index(s, `"projects"`)
 	idxMCP := strings.Index(s, `"mcpServers"`)
-	if !(idxStartups < idxUser && idxUser < idxProjects && idxProjects < idxMCP) {
+	if idxStartups >= idxUser || idxUser >= idxProjects || idxProjects >= idxMCP {
 		t.Errorf("unrelated keys reordered — old bug regression:\n%s", s)
 	}
 
