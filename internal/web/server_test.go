@@ -282,9 +282,10 @@ func TestAPI_WizardSchemaShipsNamePreviewData(t *testing.T) {
 
 func TestWizardPlan_ReturnsReservedNameWarnings(t *testing.T) {
 	srv, _ := newTestServer(t)
-	// sdd.enable produces a /plan command, which shadows Claude Code's built-in.
+	// With the safe "ld" prefix cleared, sdd.enable produces a bare /plan
+	// command, which shadows Claude Code's built-in.
 	_, out := doJSON(t, srv.Handler(), "POST", "/api/wizard/plan",
-		map[string]any{"answers": map[string]any{"sdd.enable": true}})
+		map[string]any{"answers": map[string]any{"sdd.enable": true, "naming.prefix": ""}})
 	warnings, ok := out["warnings"].([]any)
 	if !ok || len(warnings) == 0 {
 		t.Fatalf("warnings = %v, want a reserved-name warning for /plan", out["warnings"])

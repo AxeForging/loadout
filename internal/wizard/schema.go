@@ -68,9 +68,9 @@ func Sections() []Section {
 			Questions: []Question{
 				{
 					ID:      NamespacePrefixQuestionID,
-					Prompt:  "Optional namespace prefix for generated commands/skills (e.g. \"af\" → /af-plan, /af-spec). Leave empty for none.",
+					Prompt:  "Namespace prefix for generated commands/skills — the default \"ld\" installs /ld-plan, /ld-spec, … so agent built-ins like /plan are never masked by accident. Set your own (e.g. \"af\") or clear it for bare names.",
 					Type:    TypeText,
-					Default: "",
+					Default: "ld",
 				},
 			},
 		},
@@ -139,7 +139,7 @@ func Sections() []Section {
 			ID:    "sdd",
 			Title: "Spec-driven development",
 			Questions: []Question{
-				{ID: "sdd.enable", Prompt: "Enable spec-driven development workflow (/plan and /spec commands)?", Type: TypeBool, Default: true},
+				{ID: "sdd.enable", Prompt: "Enable spec-driven development workflow (plan and spec slash commands)?", Type: TypeBool, Default: true},
 				{ID: "sdd.folder", Prompt: "Where do specs live?", Type: TypeText, Default: "docs/specs"},
 				{
 					ID: "sdd.style", Prompt: "Spec template style?", Type: TypeSelect,

@@ -62,11 +62,19 @@ func TestArtifactSpecs_InvalidPrefixIsIgnored(t *testing.T) {
 	}
 }
 
-func TestNameWarnings_FlagsDefaultPlanCommand(t *testing.T) {
-	a := Answers{"sdd.enable": true}
+func TestNameWarnings_EmptyByDefaultThanksToLdPrefix(t *testing.T) {
+	// Safe out of the box: an untouched questionnaire generates /ld-plan etc.,
+	// which shadows nothing — warnings appear only once the prefix is cleared.
+	if warnings := NameWarnings(Answers{"sdd.enable": true}); len(warnings) != 0 {
+		t.Fatalf("default (ld-prefixed) names should not warn, got %v", warnings)
+	}
+}
+
+func TestNameWarnings_FlagsBarePlanCommandWhenPrefixCleared(t *testing.T) {
+	a := Answers{"sdd.enable": true, "naming.prefix": ""}
 	warnings := NameWarnings(a)
 	if len(warnings) == 0 {
-		t.Fatal("default /plan command should produce a reserved-name warning")
+		t.Fatal("bare /plan command should produce a reserved-name warning")
 	}
 	joined := strings.Join(warnings, "\n")
 	if !strings.Contains(joined, "plan") {
@@ -104,7 +112,7 @@ func TestGenerate_GoCliPresetProducesConventionArtifacts(t *testing.T) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	wantIDs := []string{"core", "toolchain", "conventions", "commit-and-pr", "linting", "docker-workflows", "sdd", "plan", "spec", "sdd-workflow", "testing", "handoff", "resume", "context-handoff"}
+	wantIDs := []string{"core", "toolchain", "conventions", "commit-and-pr", "linting", "docker-workflows", "sdd", "ld-plan", "ld-spec", "ld-sdd-workflow", "testing", "ld-handoff", "ld-resume", "context-handoff"}
 	got := map[string]domain.Artifact{}
 	for _, art := range g.Created {
 		got[art.ID] = art
@@ -152,7 +160,7 @@ func TestGenerate_GoCliPresetProducesConventionArtifacts(t *testing.T) {
 	}
 
 	// Context handoff artifacts use the cross-agent location.
-	handoff, err := os.ReadFile(filepath.Join(s.Root, "commands", "handoff.md"))
+	handoff, err := os.ReadFile(filepath.Join(s.Root, "commands", "ld-handoff.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +381,7 @@ func TestGenerate_CustomCommandNamesPropagateToEveryCrossReference(t *testing.T)
 	}
 }
 
-func TestGenerate_DefaultNamesUnchangedWhenNotRenamed(t *testing.T) {
+func TestGenerate_DefaultNamesCarryTheSafePrefix(t *testing.T) {
 	a, _ := LoadPreset("go-cli")
 	s := testStore(t)
 	g, err := Generate(s, a)
@@ -384,9 +392,14 @@ func TestGenerate_DefaultNamesUnchangedWhenNotRenamed(t *testing.T) {
 	for _, art := range g.Created {
 		got[art.ID] = true
 	}
-	for _, id := range []string{"spec", "plan", "sdd-workflow", "handoff", "resume"} {
+	for _, id := range []string{"ld-spec", "ld-plan", "ld-sdd-workflow", "ld-handoff", "ld-resume"} {
 		if !got[id] {
 			t.Errorf("default artifact ID %q missing when no custom name given", id)
+		}
+	}
+	for _, bare := range []string{"spec", "plan"} {
+		if got[bare] {
+			t.Errorf("bare %q generated — defaults must carry the ld prefix", bare)
 		}
 	}
 }
@@ -396,7 +409,7 @@ func TestGenerate_ChangeScopeReachesTheWorkflowSkill(t *testing.T) {
 	if _, err := Generate(s, Answers{"sdd.changeScope": "minimal"}); err != nil {
 		t.Fatal(err)
 	}
-	skill, err := os.ReadFile(filepath.Join(s.Root, "skills", "sdd-workflow", "SKILL.md"))
+	skill, err := os.ReadFile(filepath.Join(s.Root, "skills", "ld-sdd-workflow", "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +421,7 @@ func TestGenerate_ChangeScopeReachesTheWorkflowSkill(t *testing.T) {
 	if _, err := Generate(s2, Answers{"sdd.changeScope": "thorough"}); err != nil {
 		t.Fatal(err)
 	}
-	skill2, err := os.ReadFile(filepath.Join(s2.Root, "skills", "sdd-workflow", "SKILL.md"))
+	skill2, err := os.ReadFile(filepath.Join(s2.Root, "skills", "ld-sdd-workflow", "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,9 +477,9 @@ func TestGenerate_CommandsRenderAsValidSingleFileArtifacts(t *testing.T) {
 	if _, err := Generate(s, a); err != nil {
 		t.Fatal(err)
 	}
-	art, ok := s.Artifact("spec")
+	art, ok := s.Artifact("ld-spec")
 	if !ok {
-		t.Fatal("spec command missing")
+		t.Fatal("ld-spec command missing")
 	}
 	content, err := s.Content(art)
 	if err != nil || len(content.Files) != 1 {

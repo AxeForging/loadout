@@ -29,8 +29,8 @@ func TestFullMatrix_WizardKitAcrossAllAgents(t *testing.T) {
 		"cursor": filepath.Join(e.home, ".cursor", "skills"),
 	}
 	for label, dir := range skillHomes {
-		if _, err := os.Stat(filepath.Join(dir, "sdd-workflow", "SKILL.md")); err != nil {
-			t.Errorf("%s: sdd-workflow skill missing (%v)", label, err)
+		if _, err := os.Stat(filepath.Join(dir, "ld-sdd-workflow", "SKILL.md")); err != nil {
+			t.Errorf("%s: ld-sdd-workflow skill missing (%v)", label, err)
 		}
 	}
 
@@ -52,10 +52,10 @@ func TestFullMatrix_WizardKitAcrossAllAgents(t *testing.T) {
 	}
 
 	// Commands: native for claude, skills elsewhere.
-	if _, err := os.Stat(filepath.Join(e.home, ".claude", "commands", "handoff.md")); err != nil {
-		t.Error("claude /handoff command missing")
+	if _, err := os.Stat(filepath.Join(e.home, ".claude", "commands", "ld-handoff.md")); err != nil {
+		t.Error("claude /ld-handoff command missing")
 	}
-	if _, err := os.Stat(filepath.Join(e.home, ".codex", "skills", "resume", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(e.home, ".codex", "skills", "ld-resume", "SKILL.md")); err != nil {
 		t.Error("codex resume command-as-skill missing")
 	}
 
@@ -82,7 +82,7 @@ func TestFullMatrix_WizardKitAcrossAllAgents(t *testing.T) {
 	}
 
 	// Delete an installed file by hand — doctor's vanished-install check fires.
-	if err := os.RemoveAll(filepath.Join(e.home, ".cursor", "skills", "sdd-workflow")); err != nil {
+	if err := os.RemoveAll(filepath.Join(e.home, ".cursor", "skills", "ld-sdd-workflow")); err != nil {
 		t.Fatal(err)
 	}
 	out = e.mustRun("doctor") // a vanished install is a note, not a failure
@@ -91,7 +91,7 @@ func TestFullMatrix_WizardKitAcrossAllAgents(t *testing.T) {
 	}
 	// And sync restores it.
 	e.mustRun("sync", "--yes")
-	if _, err := os.Stat(filepath.Join(e.home, ".cursor", "skills", "sdd-workflow", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(e.home, ".cursor", "skills", "ld-sdd-workflow", "SKILL.md")); err != nil {
 		t.Fatal("sync did not restore the deleted skill")
 	}
 }

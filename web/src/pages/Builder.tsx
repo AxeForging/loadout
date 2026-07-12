@@ -7,8 +7,14 @@ import { InstructionListEditor } from "../components/InstructionListEditor";
 import { fallsBackToDefault, resolveGeneratedName } from "./Builder.helpers";
 
 // Everything a name question needs to preview its resolved install name:
-// the current namespace prefix answer and the agent built-ins it may shadow.
-type NamePreviewContext = { prefix: unknown; reserved: ReadonlySet<string> };
+// the current namespace prefix answer, which question holds that prefix
+// (so the prefix field can preview its own effect), and the agent
+// built-ins a resolved name may shadow.
+type NamePreviewContext = {
+  prefix: unknown;
+  prefixQuestionId?: string;
+  reserved: ReadonlySet<string>;
+};
 
 // The builder renders the wizard schema served by the binary — the exact
 // same questionnaire as `loadout wizard`, with a review step before any
@@ -41,8 +47,16 @@ export function BuilderPage() {
   const sections = schema.data?.sections ?? [];
   const atReview = step === sections.length;
 
+  // Mirror the backend's Answers.Str rule: an ABSENT prefix answer falls back
+  // to the schema default (safe "ld" namespacing); an explicitly cleared one
+  // stays empty. The preview must resolve names exactly like the generator.
+  const prefixId = schema.data?.namespacePrefixQuestionId;
+  const prefixDefault = sections
+    .flatMap((s) => s.questions)
+    .find((q) => q.id === prefixId)?.default;
   const namePreview: NamePreviewContext = {
-    prefix: schema.data ? answers[schema.data.namespacePrefixQuestionId] : undefined,
+    prefix: prefixId !== undefined ? (answers[prefixId] ?? prefixDefault) : undefined,
+    prefixQuestionId: prefixId,
     reserved: new Set(schema.data?.reservedCommandNames ?? []),
   };
 
@@ -279,6 +293,8 @@ function Question({
             />
             {q.namespaced ? (
               <NamePreview raw={value} def={String(q.default ?? "")} ctx={namePreview} />
+            ) : q.id === namePreview.prefixQuestionId ? (
+              <PrefixPreview ctx={namePreview} />
             ) : null}
           </>
         ) : q.type === "list" ? (
@@ -339,6 +355,24 @@ function NamePreview({ raw, def, ctx }: { raw: unknown; def: string; ctx: NamePr
       ) : shadows ? (
         <span className="ml-3 text-warn">
           ! shadows the /{resolved} built-in — set a namespace prefix or rename
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+// Instant feedback on the prefix field itself: what the flagship generated
+// commands will be called with the current prefix (bare names when cleared).
+function PrefixPreview({ ctx }: { ctx: NamePreviewContext }) {
+  const sample = (def: string) => resolveGeneratedName(undefined, def, ctx.prefix);
+  const bare = sample("plan") === "plan";
+  return (
+    <p className="mt-2 font-mono text-xs text-ink-faint">
+      → e.g. <span className="text-ember">/{sample("plan")}</span> ·{" "}
+      <span className="text-ember">/{sample("spec")}</span>
+      {bare ? (
+        <span className="ml-3 text-warn">
+          ! bare names can shadow agent built-ins like /plan — each name below shows if it does
         </span>
       ) : null}
     </p>

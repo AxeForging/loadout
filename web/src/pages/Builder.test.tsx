@@ -30,9 +30,9 @@ const schema: WizardSchema = {
       questions: [
         {
           id: "naming.prefix",
-          prompt: "Optional namespace prefix for generated commands/skills. Leave empty for none.",
+          prompt: "Namespace prefix for generated commands/skills. Clear it for bare names.",
           type: "text",
-          default: "",
+          default: "ld",
         },
         {
           id: "sdd.planCommandName",
@@ -62,50 +62,74 @@ function renderPage() {
   );
 }
 
+function planGroup() {
+  return screen.getByRole("group", { name: /name for the plan command/i });
+}
+
 function planNameField() {
-  const group = screen.getByRole("group", { name: /name for the plan command/i });
-  return within(group).getByRole("textbox");
+  return within(planGroup()).getByRole("textbox");
+}
+
+async function findPlanPreview(text: string) {
+  const group = await screen.findByRole("group", { name: /name for the plan command/i });
+  return within(group).findByText(text);
 }
 
 describe("BuilderPage name previews", () => {
-  it("shows the resolved install name and warns when it shadows a built-in", async () => {
+  it("is safe by default: an untouched form previews the ld- prefixed name, no shadow warning", async () => {
     renderPage();
 
-    expect(await screen.findByText("/plan")).toBeInTheDocument();
-    expect(screen.getByText(/shadows the \/plan built-in/)).toBeInTheDocument();
+    expect(await findPlanPreview("/ld-plan")).toBeInTheDocument();
+    expect(screen.queryByText(/shadows the/)).not.toBeInTheDocument();
+    // The prefix field itself shows its effect too.
+    const prefixGroup = screen.getByRole("group", { name: /namespace prefix/i });
+    expect(within(prefixGroup).getByText("/ld-spec")).toBeInTheDocument();
   });
 
-  it("applies the namespace prefix to a name left at its default and clears the warning", async () => {
+  it("clearing the prefix reveals the bare name and its built-in shadow warning", async () => {
     const user = userEvent.setup();
     renderPage();
 
     const prefixGroup = await screen.findByRole("group", { name: /namespace prefix/i });
-    await user.type(within(prefixGroup).getByRole("textbox"), "af");
+    await user.clear(within(prefixGroup).getByRole("textbox"));
 
-    expect(screen.getByText("/af-plan")).toBeInTheDocument();
-    expect(screen.queryByText(/shadows the/)).not.toBeInTheDocument();
+    expect(within(planGroup()).getByText("/plan")).toBeInTheDocument();
+    expect(screen.getByText(/shadows the \/plan built-in/)).toBeInTheDocument();
   });
 
-  it("lets an explicit rename win verbatim and flags invalid names", async () => {
+  it("applies a custom prefix to names left at their default", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByText("/plan");
+    const prefixGroup = await screen.findByRole("group", { name: /namespace prefix/i });
+    const prefixField = within(prefixGroup).getByRole("textbox");
+    await user.clear(prefixField);
+    await user.type(prefixField, "af");
+
+    expect(within(planGroup()).getByText("/af-plan")).toBeInTheDocument();
+    expect(screen.queryByText(/shadows the/)).not.toBeInTheDocument();
+  });
+
+  it("lets an explicit rename win verbatim (no prefix) and flags invalid names", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await findPlanPreview("/ld-plan");
     const field = planNameField();
     await user.clear(field);
     await user.type(field, "blueprint");
-    expect(screen.getByText("/blueprint")).toBeInTheDocument();
+    expect(within(planGroup()).getByText("/blueprint")).toBeInTheDocument();
     expect(screen.queryByText(/shadows the/)).not.toBeInTheDocument();
 
     await user.clear(field);
     await user.type(field, "Bad Name!");
-    expect(screen.getByText("/plan")).toBeInTheDocument();
+    expect(within(planGroup()).getByText("/ld-plan")).toBeInTheDocument();
     expect(screen.getByText(/invalid name/)).toBeInTheDocument();
   });
 
   it("strips the redundant default parenthetical from namespaced prompts", async () => {
     renderPage();
-    await screen.findByText("/plan");
+    await findPlanPreview("/ld-plan");
     expect(screen.queryByText(/the namespace prefix applies unless/)).not.toBeInTheDocument();
   });
 });
