@@ -103,6 +103,35 @@ func (s *Store) CreateSkill(name string, skillMD []byte) (domain.Artifact, error
 	return a, nil
 }
 
+// CreateMCP writes an MCP server definition with the given mcp.yaml content
+// (e.g. built by the web UI's form) and registers it. The content must pass
+// domain.ParseMCPSpec — transport shape and the no-literal-secrets rule —
+// before anything touches disk.
+func (s *Store) CreateMCP(name string, mcpYAML []byte) (domain.Artifact, error) {
+	if err := ValidateName(name); err != nil {
+		return domain.Artifact{}, err
+	}
+	if _, err := domain.ParseMCPSpec(mcpYAML); err != nil {
+		return domain.Artifact{}, err
+	}
+	if _, exists := s.Artifact(name); exists {
+		return domain.Artifact{}, fmt.Errorf("artifact %q already exists", name)
+	}
+	relPath := filepath.Join(kindDirs[domain.KindMCP], name)
+	abs := filepath.Join(s.Root, relPath, "mcp.yaml")
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return domain.Artifact{}, err
+	}
+	if err := os.WriteFile(abs, mcpYAML, 0o644); err != nil {
+		return domain.Artifact{}, err
+	}
+	a := domain.Artifact{ID: name, Kind: domain.KindMCP, Path: filepath.ToSlash(relPath), Origin: "local"}
+	if err := s.AddArtifact(a); err != nil {
+		return domain.Artifact{}, err
+	}
+	return a, nil
+}
+
 func skillTemplate(name string) string {
 	return fmt.Sprintf(`---
 name: %s

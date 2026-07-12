@@ -59,7 +59,7 @@ export function StorePage() {
                 <Link
                   to="/store/$artifactId"
                   params={{ artifactId: a.id }}
-                  className="brk group flex items-center gap-4 py-3 pl-1 pr-2 transition-colors hover:bg-surface/50"
+                  className="brk group flex items-center gap-4 rounded-lg py-3 pl-1 pr-2 transition-colors hover:bg-surface/50"
                 >
                   <KindGlyph kind={a.kind} className="flex-none text-ink-faint transition-colors group-hover:text-ember" />
                   <span className="w-56 truncate font-mono text-sm text-ink transition-colors group-hover:text-ember-bright">

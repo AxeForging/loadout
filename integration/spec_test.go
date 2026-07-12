@@ -221,20 +221,20 @@ func TestWizard_SDDPresetInstallsCLIWiredArtifacts(t *testing.T) {
 	}
 	e.mustRun("sync", "--yes")
 
-	raw, err := os.ReadFile(e.claude("skills", "sdd-workflow", "SKILL.md"))
+	raw, err := os.ReadFile(e.claude("skills", "ld-sdd-workflow", "SKILL.md"))
 	if err != nil {
-		t.Fatalf("sdd-workflow skill not installed: %v", err)
+		t.Fatalf("ld-sdd-workflow skill not installed: %v", err)
 	}
 	for _, want := range []string{"loadout spec check", "loadout spec status"} {
 		if !strings.Contains(string(raw), want) {
 			t.Errorf("installed skill missing %q — completion loop not wired to the CLI", want)
 		}
 	}
-	cmdRaw, err := os.ReadFile(e.claude("commands", "spec.md"))
+	cmdRaw, err := os.ReadFile(e.claude("commands", "ld-spec.md"))
 	if err != nil {
 		t.Fatalf("spec command not installed: %v", err)
 	}
 	if !strings.Contains(string(cmdRaw), "loadout spec init") {
-		t.Errorf("installed /spec command must scaffold via loadout spec init:\n%s", cmdRaw)
+		t.Errorf("installed /ld-spec command must scaffold via loadout spec init:\n%s", cmdRaw)
 	}
 }

@@ -4,6 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Answers, type WizardQuestion, type WizardSection } from "../api";
 import { PageHeader } from "../components/Layout";
 import { InstructionListEditor } from "../components/InstructionListEditor";
+import { fallsBackToDefault, resolveGeneratedName } from "./Builder.helpers";
+
+// Everything a name question needs to preview its resolved install name:
+// the current namespace prefix answer, which question holds that prefix
+// (so the prefix field can preview its own effect), and the agent
+// built-ins a resolved name may shadow.
+type NamePreviewContext = {
+  prefix: unknown;
+  prefixQuestionId?: string;
+  reserved: ReadonlySet<string>;
+};
 
 // The builder renders the wizard schema served by the binary — the exact
 // same questionnaire as `loadout wizard`, with a review step before any
@@ -33,8 +44,21 @@ export function BuilderPage() {
     },
   });
 
-  const sections = schema.data ?? [];
+  const sections = schema.data?.sections ?? [];
   const atReview = step === sections.length;
+
+  // Mirror the backend's Answers.Str rule: an ABSENT prefix answer falls back
+  // to the schema default (safe "ld" namespacing); an explicitly cleared one
+  // stays empty. The preview must resolve names exactly like the generator.
+  const prefixId = schema.data?.namespacePrefixQuestionId;
+  const prefixDefault = sections
+    .flatMap((s) => s.questions)
+    .find((q) => q.id === prefixId)?.default;
+  const namePreview: NamePreviewContext = {
+    prefix: prefixId !== undefined ? (answers[prefixId] ?? prefixDefault) : undefined,
+    prefixQuestionId: prefixId,
+    reserved: new Set(schema.data?.reservedCommandNames ?? []),
+  };
 
   const set = (id: string, value: unknown) => setAnswers((a) => ({ ...a, [id]: value }));
 
@@ -147,7 +171,7 @@ export function BuilderPage() {
               <span
                 className={`z-[1] flex h-6 w-6 flex-none items-center justify-center border font-mono text-xs transition-colors ${
                   atReview
-                    ? "border-ember bg-ember text-bg-deep"
+                    ? "border-ember bg-ember text-axe-accent-contrast"
                     : "border-ember-dim bg-bg text-ember"
                 }`}
               >
@@ -172,6 +196,7 @@ export function BuilderPage() {
               section={sections[step]}
               answers={answers}
               set={set}
+              namePreview={namePreview}
               onNext={() => (step + 1 < sections.length ? setStep(step + 1) : goReview())}
               isLast={step + 1 >= sections.length}
             />
@@ -186,12 +211,14 @@ function SectionForm({
   section,
   answers,
   set,
+  namePreview,
   onNext,
   isLast,
 }: {
   section: WizardSection;
   answers: Answers;
   set: (id: string, v: unknown) => void;
+  namePreview: NamePreviewContext;
   onNext: () => void;
   isLast: boolean;
 }) {
@@ -201,7 +228,7 @@ function SectionForm({
       <div className="mt-7 space-y-8">
         {section.questions.map((q, i) => (
           <div key={q.id} className="rise" style={{ "--i": i + 1 } as CSSProperties}>
-            <Question q={q} value={answers[q.id]} onChange={(v) => set(q.id, v)} />
+            <Question q={q} value={answers[q.id]} onChange={(v) => set(q.id, v)} namePreview={namePreview} />
           </div>
         ))}
       </div>
@@ -216,10 +243,12 @@ function Question({
   q,
   value,
   onChange,
+  namePreview,
 }: {
   q: WizardQuestion;
   value: unknown;
   onChange: (v: unknown) => void;
+  namePreview: NamePreviewContext;
 }) {
   const current = value ?? q.default;
 
@@ -228,13 +257,17 @@ function Question({
     return new Set(Array.isArray(current) ? (current as string[]) : []);
   }, [q.type, current]);
 
+  // Namespaced name questions get a live preview of the resolved install
+  // name, so the prompt's "(default: …)" parenthetical would only repeat it.
+  const prompt = q.namespaced ? q.prompt.replace(/\s*\(default:[^)]*\)\s*$/, "") : q.prompt;
+
   return (
     // min-w-0 overrides fieldset's browser-default intrinsic min-width
     // (fieldsets ignore min-w-0 on children unless set here too), so long
     // unbroken content inside — a custom-instruction row, e.g. — wraps
     // instead of forcing the whole page into horizontal scroll.
     <fieldset className="min-w-0">
-      <legend className="text-sm font-medium text-ink">{q.prompt}</legend>
+      <legend className="text-sm font-medium text-ink">{prompt}</legend>
       <div className="mt-3">
         {q.type === "bool" ? (
           <div className="flex gap-2">
@@ -250,13 +283,20 @@ function Question({
             ))}
           </div>
         ) : q.type === "text" ? (
-          <input
-            type="text"
-            value={typeof current === "string" ? current : ""}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="free text"
-            className="field w-full max-w-md"
-          />
+          <>
+            <input
+              type="text"
+              value={typeof current === "string" ? current : ""}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="free text"
+              className="field w-full max-w-md"
+            />
+            {q.namespaced ? (
+              <NamePreview raw={value} def={String(q.default ?? "")} ctx={namePreview} />
+            ) : q.id === namePreview.prefixQuestionId ? (
+              <PrefixPreview ctx={namePreview} />
+            ) : null}
+          </>
         ) : q.type === "list" ? (
           <InstructionListEditor
             value={Array.isArray(current) ? (current as string[]) : []}
@@ -295,6 +335,47 @@ function Question({
         )}
       </div>
     </fieldset>
+  );
+}
+
+// The truth line under a name field: exactly what will land in the store and
+// as a slash command, with the namespace prefix already applied — plus a
+// warning when that name would shadow an agent built-in like /plan.
+function NamePreview({ raw, def, ctx }: { raw: unknown; def: string; ctx: NamePreviewContext }) {
+  const resolved = resolveGeneratedName(raw, def, ctx.prefix);
+  const invalid = fallsBackToDefault(raw);
+  const shadows = ctx.reserved.has(resolved);
+  return (
+    <p className="mt-2 font-mono text-xs text-ink-faint">
+      → installs as <span className="text-ember">/{resolved}</span>
+      {invalid ? (
+        <span className="ml-3 text-warn">
+          ! invalid name (lowercase letters, digits, dashes) — the default is used
+        </span>
+      ) : shadows ? (
+        <span className="ml-3 text-warn">
+          ! shadows the /{resolved} built-in — set a namespace prefix or rename
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+// Instant feedback on the prefix field itself: what the flagship generated
+// commands will be called with the current prefix (bare names when cleared).
+function PrefixPreview({ ctx }: { ctx: NamePreviewContext }) {
+  const sample = (def: string) => resolveGeneratedName(undefined, def, ctx.prefix);
+  const bare = sample("plan") === "plan";
+  return (
+    <p className="mt-2 font-mono text-xs text-ink-faint">
+      → e.g. <span className="text-ember">/{sample("plan")}</span> ·{" "}
+      <span className="text-ember">/{sample("spec")}</span>
+      {bare ? (
+        <span className="ml-3 text-warn">
+          ! bare names can shadow agent built-ins like /plan — each name below shows if it does
+        </span>
+      ) : null}
+    </p>
   );
 }
 

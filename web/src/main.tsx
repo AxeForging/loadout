@@ -14,6 +14,7 @@ import { StorePage } from "./pages/Store";
 import { StoreDetail } from "./pages/StoreDetail";
 import { AgentsPage } from "./pages/Agents";
 import { SourcesPage } from "./pages/Sources";
+import { MCPPage } from "./pages/MCP";
 import { BuilderPage } from "./pages/Builder";
 import { LibraryPage } from "./pages/Library";
 import { ExportPage } from "./pages/Export";
@@ -26,6 +27,7 @@ const routes = [
   createRoute({ getParentRoute: () => rootRoute, path: "/store/$artifactId", component: StoreDetail }),
   createRoute({ getParentRoute: () => rootRoute, path: "/agents", component: AgentsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/sources", component: SourcesPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/mcp", component: MCPPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/builder", component: BuilderPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/library", component: LibraryPage }),
   createRoute({ getParentRoute: () => rootRoute, path: "/export", component: ExportPage }),

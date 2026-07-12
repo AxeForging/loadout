@@ -1,5 +1,7 @@
 # 005 — Naming safety: namespace prefix, reserved-name warnings, YAML upload
 
+> **Amendment (2026-07-12):** requirement 8's "no default change" was revisited by the maintainer: `naming.prefix` now **defaults to `ld`**, so an untouched questionnaire generates `/ld-plan`, `/ld-spec`, … and never masks an agent built-in out of the box. Explicitly clearing the prefix restores bare names (advisory warnings still fire, never block). Dot-namespacing (`ld.plan`) was ruled out — agents only accept `[a-z0-9-]` names. The web Builder previews the resolved name live on every name question and on the prefix field itself.
+
 ## Context
 
 Two smaller newcomer-safety gaps, grouped because they share a theme (don't let a fresh user shoot themselves in the foot with names or file formats):

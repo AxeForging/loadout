@@ -134,6 +134,10 @@ loadout new mcp github     # scaffolds mcps/github/mcp.yaml — edit it
 loadout sync               # merges it into every agent's MCP config (asks first)
 ```
 
+Prefer a form over YAML? The web UI (`loadout serve`) has a dedicated **MCP** page: pick the transport, fill command/args or URL, add `${VAR}`-placeholder env/headers, and it lands in the store with the same validation — installing into agents still goes through the gated sync.
+
+The same page also lists MCP servers **already configured in your agents' own configs** that loadout doesn't manage yet, and adopts them into the store in one click (read-only on the agent file — sync takes over afterwards). Literal secret values found in an agent config are converted to `${VAR}` placeholders during adoption and never enter the store or even the browser: the page tells you which variables to export instead.
+
 ```yaml
 # mcps/github/mcp.yaml
 transport: stdio            # stdio (default) | http | sse
@@ -210,7 +214,7 @@ Non-interactive: `loadout wizard --preset go-cli --yes` (presets: `go-cli`, `web
 
 **Name the commands and skills yourself** — `/spec`, `/plan`, `/handoff`, `/resume` and the `sdd-workflow` skill each have a naming question (e.g. rename `sdd-workflow` to `fe-sdd-workflow` for a frontend-specific flow). Every generated cross-reference (the workflow skill mentioning `/plan`, the resume command's description, and so on) uses the name you chose — nothing is left pointing at the old one.
 
-**Namespace prefix** — the Naming station asks for an optional prefix (e.g. `af`) that's applied to every *defaulted* command/skill name at once: `/plan` → `/af-plan`, `/spec` → `/af-spec`, and so on. This keeps generated commands from clashing with agents' built-in slash commands like `/plan`. An explicit per-name rename always wins over the prefix. Whenever a generated (or scaffolded, or imported) command/skill name would shadow a built-in, loadout prints an advisory `!` warning — in the wizard, `loadout new`, `loadout bundle import`, and `loadout doctor` — but never blocks it: shadowing is allowed when you mean to.
+**Namespace prefix — safe by default** — the Naming station's prefix defaults to `ld`, so an untouched questionnaire generates `/ld-plan`, `/ld-spec`, `/ld-handoff`, … and never masks an agent's built-in `/plan` or `/resume` by accident. Set your own prefix (e.g. `af` → `/af-plan`) or clear it for bare names — the prefix applies to every *defaulted* command/skill name at once, and an explicit per-name rename always wins over it. The web Builder shows the exact resolved name live under each field (`→ installs as /ld-plan`). Whenever a generated (or scaffolded, or imported) command/skill name would shadow a built-in, loadout prints an advisory `!` warning — in the wizard, `loadout new`, `loadout bundle import`, and `loadout doctor` — but never blocks it: shadowing is allowed when you mean to. (Dot names like `ld.plan` aren't possible — agents only accept lowercase letters, digits and dashes.)
 
 **Tell it how aggressively to change your codebase** — `sdd.changeScope` (minimal / balanced / thorough) becomes a "Change scope" section in the generated `sdd-workflow` skill: *minimal* scopes every change to the fewest files, insists on reusing existing code over duplicating it, and favors several small reviewable PRs; *thorough* allows broader changes when they clearly help; *balanced* (default) is the middle ground.
 
@@ -240,6 +244,8 @@ Where the checklist lives is per-project (`docs/specs/sdd.yaml`):
 - **`backend: github`** — one tracking issue per spec; `init` opens it (repo auto-detected from `origin`, labels configurable) and `check` updates the issue body. Requires the [`gh` CLI](https://cli.github.com) — loadout shells out to it, so your existing auth just works and loadout never stores a token. `loadout spec sync` reconciles file ↔ issue: structure always flows local → GitHub, while check-state divergence is reported and only resolved with an explicit `--from-local` / `--from-github` — never guessed.
 
 The `sdd` wizard preset (`loadout wizard --preset sdd`) installs `/spec`, `/plan` and the `sdd-workflow` skill into every agent, all instructing the same loop: scaffold via `spec init`, mark steps with `spec check` the moment they're done, resume from `spec status`. One tested code path instead of four agents hand-editing checkboxes. `loadout spec` only touches project files — never the store or agent homes.
+
+The wizard's spec-driven section also asks **where spec checklists live** (`sdd.backend`: local files or GitHub issues) — the generated `/spec` command, `sdd` instruction and workflow skill then all point at the matching `loadout spec init` invocation (`--backend github` when the team tracks specs in issues), in the CLI questionnaire and the web Builder alike.
 
 ## Profiles — reuse your answers across projects and teams
 
@@ -294,7 +300,7 @@ Reliability model: deterministic templates are always the base (offline, reprodu
 
 ## The web UI
 
-`loadout serve` opens the armory in the browser (embedded in the binary — no separate install): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), one-click bundle export and import, the **Builder** — the wizard as a multi-step form, a dedicated **Library** page for browsing/searching/deleting custom instructions and managing groups, and a dedicated **Export** page for picking exactly what to share. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
+`loadout serve` opens the armory in the browser (embedded in the binary — no separate install), wearing the AxeForge family look (forge flavor): overview with per-agent drift counts, store browser, drift matrix with inline diffs, sources (add a repo and check remotes, same as the CLI), a dedicated **MCP** page for defining MCP servers as store artifacts (transport, `${VAR}`-placeholder env/headers — literal secrets are rejected before anything is written), one-click bundle export and import, the **Builder** — the wizard as a multi-step form where every command/skill name question shows a live "installs as `/name`" preview (namespace prefix applied, built-in shadowing flagged), a dedicated **Library** page for browsing/searching/deleting custom instructions and managing groups, and a dedicated **Export** page for picking exactly what to share. Applying changes is a visible two-step ritual: a docked pending bar → review the exact plan → apply. The apply endpoint only accepts a token minted by the plan you just reviewed, so the no-silent-writes promise holds over HTTP too. The server binds to localhost only.
 
 ## Bundles — share your whole setup
 

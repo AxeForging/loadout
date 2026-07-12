@@ -1,5 +1,7 @@
 package domain
 
+import "sort"
+
 // Reserved-name knowledge lives in domain because every layer that needs it
 // (wizard, store, bundle, cli, web) already imports domain, and the import
 // rules forbid those packages depending on adapter — where per-agent command
@@ -46,6 +48,18 @@ var reservedCommandNames = map[string]bool{
 	"todos":           true,
 	"upgrade":         true,
 	"vim":             true,
+}
+
+// ReservedCommandNames returns the sorted built-in slash-command names, for
+// surfaces that warn live while a user types (e.g. the web builder's name
+// fields) instead of waiting for a generate plan.
+func ReservedCommandNames() []string {
+	out := make([]string, 0, len(reservedCommandNames))
+	for n := range reservedCommandNames {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ReservedNameWarning returns a human-readable warning if name would collide

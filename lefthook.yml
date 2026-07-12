@@ -14,6 +14,24 @@ pre-commit:
       glob: "*.go"
       run: go vet ./...
 
+# CI's lint matters most at push time — running the same golangci-lint locally
+# stops a push that CI would reject minutes later. Skipped when the binary
+# isn't installed so the hook never hard-blocks a machine that doesn't have it
+# yet (the message tells you how to install it and how to skip when needed).
+pre-push:
+  parallel: false
+  commands:
+    golangci-lint:
+      glob: "*.go"
+      run: |
+        if ! command -v golangci-lint >/dev/null 2>&1; then
+          echo "pre-push: golangci-lint not installed — CI will still run it."
+          echo "  install: brew install golangci-lint  (or see https://golangci-lint.run/welcome/install)"
+          echo "  skip once: LEFTHOOK_EXCLUDE=golangci-lint git push"
+          exit 0
+        fi
+        golangci-lint run --timeout=5m
+
 commit-msg:
   commands:
     commitlint:

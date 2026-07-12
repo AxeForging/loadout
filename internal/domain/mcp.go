@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -121,6 +122,55 @@ func isPlainWordRune(r rune) bool {
 		return true
 	}
 	return false
+}
+
+// MaskSecretValues returns a copy of the spec with literal values under
+// secret-looking env/header keys replaced by ${VAR} placeholders derived from
+// the key, plus the sorted placeholder names introduced. Used when adopting
+// entries out of an agent's native config: the literal never enters the store
+// (or even the API response) — the user exports the variable instead.
+func (m MCPSpec) MaskSecretValues() (MCPSpec, []string) {
+	var masked []string
+	m.Env, masked = maskSecretMap(m.Env, masked)
+	m.Headers, masked = maskSecretMap(m.Headers, masked)
+	sort.Strings(masked)
+	return m, masked
+}
+
+func maskSecretMap(in map[string]string, acc []string) (map[string]string, []string) {
+	if len(in) == 0 {
+		return in, acc
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if checkSecretValue("value", k, v) != nil {
+			name := placeholderVarName(k)
+			out[k] = "${" + name + "}"
+			acc = append(acc, name)
+		} else {
+			out[k] = v
+		}
+	}
+	return out, acc
+}
+
+// placeholderVarName derives a valid ${VAR} name from an env/header key:
+// uppercase, non-alphanumerics collapsed to underscores, leading digit guarded.
+func placeholderVarName(key string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(key) {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	s := b.String()
+	if s == "" || (s[0] >= '0' && s[0] <= '9') {
+		s = "_" + s
+	}
+	return s
 }
 
 func literalSecretError(kind, key string) error {

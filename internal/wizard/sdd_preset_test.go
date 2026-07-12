@@ -24,9 +24,9 @@ func TestSDDPreset_GeneratesArtifactsWiredToTheSpecCLI(t *testing.T) {
 		byID[s.id] = s
 	}
 
-	workflow, ok := byID["sdd-workflow"]
+	workflow, ok := byID["ld-sdd-workflow"]
 	if !ok || workflow.kind != domain.KindSkill {
-		t.Fatalf("sdd preset must generate the sdd-workflow skill; got %v", byID)
+		t.Fatalf("sdd preset must generate the (ld-prefixed) sdd-workflow skill; got %v", byID)
 	}
 	skillBody := workflow.files["SKILL.md"]
 	for _, want := range []string{"loadout spec check", "loadout spec status", "<!-- sdd:"} {
@@ -35,7 +35,7 @@ func TestSDDPreset_GeneratesArtifactsWiredToTheSpecCLI(t *testing.T) {
 		}
 	}
 
-	spec, ok := byID["spec"]
+	spec, ok := byID["ld-spec"]
 	if !ok || spec.kind != domain.KindCommand {
 		t.Fatalf("sdd preset must generate the spec command")
 	}
@@ -43,7 +43,7 @@ func TestSDDPreset_GeneratesArtifactsWiredToTheSpecCLI(t *testing.T) {
 		t.Error("spec command must scaffold via 'loadout spec init' (numbering + issue creation live there)")
 	}
 
-	plan, ok := byID["plan"]
+	plan, ok := byID["ld-plan"]
 	if !ok || plan.kind != domain.KindCommand {
 		t.Fatalf("sdd preset must generate the plan command")
 	}

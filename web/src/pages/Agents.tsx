@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
+import { DiffView } from "../components/DiffView";
 import { PageHeader } from "../components/Layout";
 import { StateBadge, stateOf, KindGlyph } from "../components/StateBadge";
 
@@ -122,7 +123,7 @@ export function AgentsPage() {
       <div className="expander" data-open={diffFor !== null}>
         <div>
           {diffFor ? (
-            <section className="mt-8 border border-line bg-surface/40">
+            <section className="mt-8 overflow-hidden rounded-2xl border border-line bg-surface/40">
               <div className="flex items-baseline justify-between border-b border-line px-4 py-2.5">
                 <h2 className="font-display text-sm font-semibold text-ink">
                   {diffFor.artifact} <span className="text-ink-faint">→</span> {diffFor.agent}
@@ -145,23 +146,8 @@ export function AgentsPage() {
                 ) : (
                   (diff.data ?? []).map((d) => (
                     <div key={d.relPath} className="mb-3 last:mb-0">
-                      <p className="font-mono text-xs text-ink-faint">{d.relPath}</p>
-                      <pre className="mt-1.5 overflow-x-auto border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed">
-                        {d.diff.split("\n").map((line, i) => (
-                          <span
-                            key={i}
-                            className={
-                              line.startsWith("+")
-                                ? "block text-sync"
-                                : line.startsWith("-")
-                                  ? "block text-danger"
-                                  : "block text-ink-faint"
-                            }
-                          >
-                            {line || " "}
-                          </span>
-                        ))}
-                      </pre>
+                      <p className="mb-1.5 font-mono text-xs text-ink-faint">{d.relPath}</p>
+                      <DiffView diff={d.diff} />
                     </div>
                   ))
                 )}

@@ -45,7 +45,7 @@ export function Dashboard() {
       />
 
       {data.store.artifacts === 0 ? (
-        <div className="rise brk max-w-[65ch] border border-line p-6" data-active="true">
+        <div className="rise brk max-w-[65ch] rounded-lg border border-line p-6" data-active="true">
           <div className="flex items-center gap-2.5 text-ink-faint">
             {["skill", "instruction", "command", "hook", "settings", "mcp"].map((k) => (
               <KindGlyph key={k} kind={k} className="h-3.5 w-3.5" />

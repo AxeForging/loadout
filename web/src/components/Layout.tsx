@@ -7,12 +7,11 @@ const nav = [
   { to: "/store", label: "Store" },
   { to: "/agents", label: "Agents" },
   { to: "/sources", label: "Sources" },
+  { to: "/mcp", label: "MCP" },
   { to: "/builder", label: "Builder" },
   { to: "/library", label: "Library" },
   { to: "/export", label: "Export" },
 ];
-
-const SLOT_H = 36; // px — keep in sync with the h-9 rows below
 
 function activeIndex(pathname: string): number {
   if (pathname === "/") return 0;
@@ -20,28 +19,25 @@ function activeIndex(pathname: string): number {
   return i;
 }
 
-// The four-square loadout mark, stamped in one square at a time.
+// The AxeForge mark (branding kit logo.svg, inlined so the blades follow
+// --af-accent): blades stamp in, the terminal cursor keeps a slow blink.
 function Mark() {
-  const cells = [
-    { x: 1, y: 1, ember: true },
-    { x: 12, y: 1, ember: false },
-    { x: 1, y: 12, ember: false },
-    { x: 12, y: 12, ember: true },
-  ];
   return (
-    <svg viewBox="0 0 22 22" className="h-6 w-6" aria-hidden>
-      {cells.map((c, i) => (
-        <rect
-          key={i}
-          x={c.x}
-          y={c.y}
-          width="9"
-          height="9"
-          className="stamp"
-          style={{ animationDelay: `${120 + i * 90}ms` }}
-          fill={c.ember ? "var(--color-ember)" : "var(--color-line-strong)"}
-        />
-      ))}
+    <svg viewBox="0 0 32 32" className="h-7 w-7" aria-hidden>
+      <path d="M16 5 V24.5" stroke="var(--af-text)" strokeWidth="3.5" />
+      <path
+        fill="var(--af-accent)"
+        d="M16 10 L7 4 A8.5 8.5 0 0 0 7 16 Z"
+        className="stamp"
+        style={{ animationDelay: "120ms" }}
+      />
+      <path
+        fill="var(--af-accent)"
+        d="M16 10 L25 4 A8.5 8.5 0 0 1 25 16 Z"
+        className="stamp"
+        style={{ animationDelay: "240ms" }}
+      />
+      <rect x="14.25" y="26.5" width="3.5" height="3.5" fill="var(--af-accent)" className="ember-pulse" />
     </svg>
   );
 }
@@ -51,77 +47,67 @@ export function Layout() {
   const idx = activeIndex(pathname);
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto flex max-w-6xl gap-14 px-6 pb-40 pt-10">
-        <aside className="w-48 shrink-0">
-          <div className="sticky top-10">
-            <Link to="/" className="flex select-none items-center gap-3">
-              <Mark />
-              <span>
-                <span className="block font-display text-xl font-bold leading-none tracking-wide text-ink">
-                  LOAD<span className="text-ember">OUT</span>
-                </span>
-                <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-ink-faint">
-                  AGENTIC GEAR KIT
-                </span>
+    <div className="technical-grid flex min-h-screen flex-col">
+      {/* Family topbar: edge-to-edge, sticky, one hairline — see branding kit. */}
+      <header className="sticky top-0 z-40 min-h-[68px] border-b border-line bg-surface/90 py-[14px] backdrop-blur">
+        <div className="flex w-full flex-wrap items-center gap-x-8 gap-y-2 px-6">
+          <Link to="/" className="flex select-none items-center gap-3">
+            <Mark />
+            <span>
+              <span className="block text-xl font-bold leading-none tracking-tight text-ink">
+                load<span className="text-ember">out</span>
               </span>
-            </Link>
+              <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-ink-faint">
+                AGENTIC GEAR KIT
+              </span>
+            </span>
+          </Link>
 
-            {/* The rack: numbered slots on a rail, ember marker slides between them. */}
-            <nav className="relative mt-12">
-              <span aria-hidden className="absolute inset-y-1 left-0 w-px bg-line" />
-              <span
-                aria-hidden
-                className="absolute left-0 w-[2px] bg-ember transition-transform"
-                style={{
-                  height: SLOT_H - 12,
-                  transform: `translateY(${(idx < 0 ? 0 : idx) * SLOT_H + 6}px)`,
-                  opacity: idx < 0 ? 0 : 1,
-                  transitionDuration: "450ms",
-                  transitionTimingFunction: "var(--ease-out-expo)",
-                }}
-              />
-              <div className="flex flex-col">
-                {nav.map((item, i) => {
-                  const on = i === idx;
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={`group flex h-9 items-center gap-3 pl-5 text-sm transition-colors ${
-                        on ? "text-ink" : "text-ink-dim hover:text-ink"
-                      }`}
-                    >
-                      <span
-                        className={`font-mono text-[10px] tnum transition-colors ${
-                          on ? "text-ember" : "text-ink-faint group-hover:text-ink-dim"
-                        }`}
-                      >
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span className={on ? "font-medium" : ""}>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </nav>
+          {/* The rack, laid flat: numbered slots, accent marker slides in under the active one. */}
+          <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {nav.map((item, i) => {
+              const on = i === idx;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`group relative flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm transition-colors ${
+                    on ? "text-ink" : "text-ink-dim hover:text-ink"
+                  }`}
+                >
+                  <span
+                    className={`font-mono text-[10px] tnum transition-colors ${
+                      on ? "text-ember" : "text-ink-faint group-hover:text-ink-dim"
+                    }`}
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className={on ? "font-medium" : ""}>{item.label}</span>
+                  <span
+                    aria-hidden
+                    className={`absolute inset-x-3 bottom-0 h-[2px] origin-left bg-ember transition-transform duration-300 ${
+                      on ? "scale-x-100" : "scale-x-0"
+                    }`}
+                    style={{ transitionTimingFunction: "var(--ease-out-expo)" }}
+                  />
+                </Link>
+              );
+            })}
+          </nav>
 
-            <div className="mt-14 border-t border-line pt-4">
-              <p className="font-mono text-[11px] leading-relaxed text-ink-faint">
-                nothing is written
-                <br />
-                without asking.
-              </p>
-            </div>
-          </div>
-        </aside>
+          <p className="hidden font-mono text-[11px] leading-tight text-ink-faint lg:block">
+            nothing is written
+            <br />
+            without asking.
+          </p>
+        </div>
+      </header>
 
-        <main className="min-w-0 flex-1">
-          <div key={pathname} className="page">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 pb-40 pt-10">
+        <div key={pathname} className="page">
+          <Outlet />
+        </div>
+      </main>
       <SyncDock />
     </div>
   );
@@ -131,7 +117,7 @@ export function PageHeader({ crate, title, sub }: { crate: string; title: string
   return (
     <header className="mb-10">
       <p className="crate">{crate}</p>
-      <h1 className="wipe mt-2 font-display text-[1.9rem] font-semibold leading-tight text-ink">
+      <h1 className="wipe mt-2 text-[1.9rem] font-bold leading-tight tracking-tight text-ink">
         {title}
       </h1>
       {sub ? (

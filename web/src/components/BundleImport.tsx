@@ -97,7 +97,7 @@ export function BundleImport() {
           </button>
         </div>
       ) : plan ? (
-        <div className="rise mt-4 border border-line-strong bg-raised p-4">
+        <div className="rise mt-4 rounded-2xl border border-line-strong bg-raised p-4">
           <div className="flex items-baseline justify-between">
             <p className="font-display text-sm font-semibold uppercase tracking-wider text-ink">
               {plan.meta.name} — {changes} change{changes === 1 ? "" : "s"}
@@ -224,7 +224,7 @@ export function BundleImport() {
                 onChange={(e) => setPastedYaml(e.target.value)}
                 placeholder="Paste a loadout-config/v1 YAML document…"
                 rows={8}
-                className="w-full resize-y overflow-x-auto border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed"
+                className="w-full resize-y overflow-x-auto rounded-lg border border-line bg-bg-deep/60 p-4 font-mono text-xs leading-relaxed"
               />
               <div className="mt-3 flex items-center gap-3">
                 <button

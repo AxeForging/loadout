@@ -19,7 +19,7 @@ func TestWizard_PresetGeneratesAndSyncs(t *testing.T) {
 	}
 
 	out = e.mustRun("status")
-	for _, id := range []string{"core", "conventions", "commit-and-pr", "linting", "sdd-workflow", "plan", "spec"} {
+	for _, id := range []string{"core", "conventions", "commit-and-pr", "linting", "ld-sdd-workflow", "ld-plan", "ld-spec"} {
 		if !strings.Contains(out, id) {
 			t.Errorf("status missing wizard artifact %q:\n%s", id, out)
 		}
@@ -35,9 +35,9 @@ func TestWizard_PresetGeneratesAndSyncs(t *testing.T) {
 	if !strings.Contains(string(raw), "Conventional Commits") {
 		t.Errorf("conventions not synced into CLAUDE.md:\n%s", raw)
 	}
-	// The /plan command exists natively for claude.
-	if _, err := os.Stat(e.claude("commands", "plan.md")); err != nil {
-		t.Error("plan command not installed")
+	// The /ld-plan command exists natively for claude (safe default prefix).
+	if _, err := os.Stat(e.claude("commands", "ld-plan.md")); err != nil {
+		t.Error("ld-plan command not installed")
 	}
 	// The commit-and-pr skill ships its lefthook reference.
 	if _, err := os.Stat(e.claude("skills", "commit-and-pr", "references", "lefthook.yml")); err != nil {
@@ -80,7 +80,7 @@ func TestWizard_AnswersFileAndDeclineWritesNothing(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(storeDir, "skills", "docker-workflows")); !os.IsNotExist(err) {
 		t.Error("docker-workflows generated despite docker=false")
 	}
-	if _, err := os.Stat(filepath.Join(storeDir, "commands", "plan.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(storeDir, "commands", "ld-plan.md")); !os.IsNotExist(err) {
 		t.Error("sdd artifacts generated despite sdd.enable=false")
 	}
 }

@@ -97,11 +97,11 @@ export function InstructionListEditor({
       </div>
 
       {value.length > 0 ? (
-        <ul className="mt-3 space-y-1 border-y border-line py-2">
+        <ul className="mt-3 divide-y divide-line border-y border-line">
           {value.map((item, i) => (
             <li
               key={`${item}-${i}`}
-              className="rise flex items-start gap-3 py-0.5 font-mono text-sm text-ink"
+              className="rise flex items-start gap-3 py-2 font-mono text-sm text-ink"
               style={{ "--i": i } as CSSProperties}
             >
               <LibraryEntryRow
@@ -121,7 +121,7 @@ export function InstructionListEditor({
                 type="button"
                 onClick={() => removeRow(i)}
                 aria-label={`remove ${item}`}
-                className="shrink-0 text-xs text-ink-faint transition-colors hover:text-danger"
+                className="btn-x"
               >
                 ×
               </button>
@@ -157,11 +157,8 @@ export function InstructionListEditor({
                         ? `confirm delete ${entry.text} from library`
                         : `delete ${entry.text} from library`
                     }
-                    className={
-                      confirmingDeleteId === entry.id
-                        ? "font-medium text-danger"
-                        : "text-xs text-ink-faint transition-colors hover:text-danger"
-                    }
+                    data-armed={confirmingDeleteId === entry.id}
+                    className="btn-x"
                   >
                     {confirmingDeleteId === entry.id ? "confirm ×" : "×"}
                   </button>
