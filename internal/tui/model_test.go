@@ -164,3 +164,20 @@ func TestModel_DiffViewShowsSelectedRow(t *testing.T) {
 		t.Error("esc should close the diff view")
 	}
 }
+
+func TestModel_OverviewShowsCachedUpdateHint(t *testing.T) {
+	m, _ := newTestModel(t)
+
+	// No cached count → no hint line.
+	if strings.Contains(m.View(), "source update(s) available") {
+		t.Error("hint rendered without a cached update count")
+	}
+
+	// Cached count present (as loadSnapshot would deliver it) → hint line.
+	updated, _ := m.Update(snapshotMsg{rows: m.rows, plan: m.plan, agents: m.agents, sources: m.sources, updateHint: 2})
+	m = updated.(*Model)
+	view := m.View()
+	if !strings.Contains(view, "2 source update(s) available — run: loadout update") {
+		t.Errorf("overview should show the cached update hint:\n%s", view)
+	}
+}

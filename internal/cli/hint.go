@@ -3,12 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/AxeForging/loadout/internal/config"
-	"github.com/goccy/go-yaml"
 	"github.com/urfave/cli/v3"
 )
 
@@ -16,51 +13,10 @@ import (
 // updates.checkOnRun in config.yaml. Failures are always silent, the network
 // budget is 2 seconds, results are cached for updates.intervalHours (24 by
 // default), and nothing is ever applied — at most one trailing hint line is
-// printed.
+// printed. The cache itself lives in internal/config so the TUI dashboard
+// can read the same signal.
 
-type updateCache struct {
-	CheckedAt time.Time `yaml:"checkedAt"`
-	Updates   int       `yaml:"updates"`
-}
-
-func updateCachePath() (string, error) {
-	data, err := config.DataDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(data, "update-cache.yaml"), nil
-}
-
-func loadUpdateCache() (updateCache, bool) {
-	var c updateCache
-	path, err := updateCachePath()
-	if err != nil {
-		return c, false
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return c, false
-	}
-	if err := yaml.Unmarshal(raw, &c); err != nil {
-		return c, false
-	}
-	return c, true
-}
-
-func saveUpdateCache(updates int) {
-	path, err := updateCachePath()
-	if err != nil {
-		return
-	}
-	raw, err := yaml.Marshal(updateCache{CheckedAt: time.Now(), Updates: updates})
-	if err != nil {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
-	}
-	_ = os.WriteFile(path, raw, 0o644)
-}
+func saveUpdateCache(updates int) { config.SaveUpdateCache(updates) }
 
 // maybeUpdateHint is called at the end of read-heavy commands (status, sync).
 func maybeUpdateHint(ctx context.Context, cmd *cli.Command) {
@@ -73,7 +29,7 @@ func maybeUpdateHint(ctx context.Context, cmd *cli.Command) {
 		interval = 24 * time.Hour
 	}
 
-	if cache, ok := loadUpdateCache(); ok && time.Since(cache.CheckedAt) < interval {
+	if cache, ok := config.LoadUpdateCache(); ok && time.Since(cache.CheckedAt) < interval {
 		if cache.Updates > 0 {
 			fmt.Printf("\nhint: %d source(s) have updates — run 'loadout update' (or 'loadout check' for details)\n", cache.Updates)
 		}

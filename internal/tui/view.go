@@ -142,6 +142,9 @@ func (m *Model) renderOverview() string {
 			b.WriteString("  " + styleDim.Render("everything in sync") + "\n")
 		}
 	}
+	if m.updateHint > 0 {
+		fmt.Fprintf(&b, "  %s\n", styleDim.Render(fmt.Sprintf("%d source update(s) available — run: loadout update", m.updateHint)))
+	}
 	return b.String()
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AxeForging/loadout/internal/config"
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/engine"
 	"github.com/AxeForging/loadout/internal/source"
@@ -47,7 +48,10 @@ type snapshotMsg struct {
 	plan    *engine.Plan
 	agents  []agentInfo
 	sources []domain.SourceRef
-	err     error
+	// updateHint is the cached source-update count from `loadout check` —
+	// read-only parity with the CLI hint, never triggers network from the TUI.
+	updateHint int
+	err        error
 }
 
 type checkMsg struct {
@@ -81,10 +85,11 @@ type Model struct {
 	diffLines  []string
 	diffOffset int
 
-	logLines []string
-	loading  bool
-	checking bool
-	err      error
+	logLines   []string
+	loading    bool
+	checking   bool
+	updateHint int
+	err        error
 }
 
 func NewModel(deps Deps) *Model {
@@ -112,7 +117,11 @@ func (m *Model) loadSnapshot() tea.Cmd {
 		if deps.Sources != nil {
 			sources, _ = deps.Sources.Lock()
 		}
-		return snapshotMsg{rows: rows, plan: plan, agents: agents, sources: sources}
+		hint := 0
+		if cache, ok := config.LoadUpdateCache(); ok {
+			hint = cache.Updates
+		}
+		return snapshotMsg{rows: rows, plan: plan, agents: agents, sources: sources, updateHint: hint}
 	}
 }
 
@@ -146,6 +155,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		if msg.err == nil {
 			m.rows, m.plan, m.agents, m.sources = msg.rows, msg.plan, msg.agents, msg.sources
+			m.updateHint = msg.updateHint
 			m.clampCursors()
 		}
 		return m, nil
