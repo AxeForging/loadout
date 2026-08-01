@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type SourceCheck } from "../api";
+import { api, type SourceCheck, type SourceUpdatePlanResponse } from "../api";
 import { PageHeader } from "../components/Layout";
 
 export function SourcesPage() {
@@ -17,7 +17,7 @@ export function SourcesPage() {
       <PageHeader
         crate="armory / sources"
         title="External sources"
-        sub="Skill repos pinned in sources.lock.yaml — adding clones and imports once; checking is ls-remote only; applying updates stays in the CLI (loadout update) where the diff is reviewed."
+        sub="Skill repos pinned in sources.lock.yaml — adding clones and imports once; checking is ls-remote only; updates are two-phase (plan, review the per-skill classification, apply) and never discard your local edits without an explicit opt-in."
       />
 
       <AddSourceForm onAdded={() => void queryClient.invalidateQueries({ queryKey: ["sources"] })} />
@@ -74,15 +74,163 @@ export function SourcesPage() {
             })}
           </ul>
 
-          {(check.data ?? []).some((r) => r.hasUpdate) ? (
-            <p className="rise mt-4 text-sm text-ink-dim">
-              Updates available — run{" "}
-              <code className="font-mono text-xs text-ember">loadout update</code> to review the
-              changelog and per-skill diff before anything moves.
-            </p>
-          ) : null}
+          <UpdatePlanner
+            hasUpdates={(check.data ?? []).some((r) => r.hasUpdate)}
+            onApplied={() => void queryClient.invalidateQueries({ queryKey: ["sources"] })}
+          />
         </>
       )}
+    </div>
+  );
+}
+
+// UpdatePlanner is the web counterpart of `loadout update`: plan first, show
+// the three-way classification with the CLI's vocabulary, and only apply
+// after review. Discarding locally edited skills is a separate, explicit
+// checkbox naming exactly what would be lost.
+function UpdatePlanner({ hasUpdates, onApplied }: { hasUpdates: boolean; onApplied: () => void }) {
+  const [planData, setPlanData] = useState<SourceUpdatePlanResponse | null>(null);
+  const [discard, setDiscard] = useState(false);
+
+  const plan = useMutation({
+    mutationFn: api.sourcesUpdatePlan,
+    onSuccess: (d) => {
+      setPlanData(d);
+      setDiscard(false);
+    },
+  });
+  const apply = useMutation({
+    mutationFn: () => api.sourcesUpdateApply(planData?.token ?? "", discard),
+    onSuccess: () => {
+      setPlanData(null);
+      onApplied();
+    },
+  });
+
+  const conflictNames = (planData?.plans ?? []).flatMap((p) => p.conflicts);
+  const writes = (planData?.plans ?? []).some(
+    (p) => p.changed.length > 0 || p.added.length > 0 || p.removed.length > 0 || !p.upToDate,
+  );
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-3">
+        <button onClick={() => plan.mutate()} disabled={plan.isPending} className="btn-ember">
+          {plan.isPending ? "Planning…" : "Plan updates"}
+        </button>
+        {hasUpdates && !planData ? (
+          <span className="text-xs text-ink-faint">
+            fetches each source and classifies every skill before anything moves
+          </span>
+        ) : null}
+      </div>
+      {plan.isError ? <p className="stamp mt-2 text-xs text-danger">{String(plan.error)}</p> : null}
+
+      {planData ? (
+        <div className="rise mt-4 rounded-lg border border-line p-5">
+          {planData.plans.map((p) => (
+            <div key={p.source} className="mb-4 last:mb-0">
+              <p className="font-mono text-sm text-ink">
+                {p.source}{" "}
+                <span className="text-ink-faint">
+                  {p.upToDate
+                    ? `pin up-to-date @ ${p.from.slice(0, 10)}`
+                    : `${p.from.slice(0, 10)} → ${p.to.slice(0, 10)}`}
+                </span>
+              </p>
+              <ul className="mt-2 space-y-1 font-mono text-xs">
+                {p.changed.map((n) => (
+                  <li key={`c-${n}`} className="text-sync">
+                    ~ update {n}{" "}
+                    {p.legacyBaseline.includes(n) ? "(no baseline — edits undetectable)" : "(upstream changed)"}
+                  </li>
+                ))}
+                {p.added.map((n) => (
+                  <li key={`a-${n}`} className="text-sync">
+                    + new skill {n}
+                  </li>
+                ))}
+                {p.locallyEdited.map((n) => (
+                  <li key={`e-${n}`} className="text-drift">
+                    ! {n} locally edited — left alone
+                  </li>
+                ))}
+                {p.conflicts.map((n) => (
+                  <li key={`x-${n}`} className="text-danger">
+                    !! {n} — edited locally AND changed upstream
+                  </li>
+                ))}
+                {p.ownedElsewhere.map((n) => (
+                  <li key={`o-${n}`} className="text-ink-faint">
+                    . {n} exists locally with a different origin — not touched
+                  </li>
+                ))}
+                {p.removed.map((n) => (
+                  <li key={`r-${n}`} className="text-ink-dim">
+                    - {n} no longer upstream (kept, relabeled local)
+                  </li>
+                ))}
+                {p.changed.length +
+                  p.added.length +
+                  p.locallyEdited.length +
+                  p.conflicts.length +
+                  p.ownedElsewhere.length +
+                  p.removed.length ===
+                0 ? (
+                  <li className="text-ink-faint">nothing to change</li>
+                ) : null}
+              </ul>
+            </div>
+          ))}
+
+          {conflictNames.length > 0 ? (
+            <label className="mt-3 flex items-start gap-2 text-xs text-danger">
+              <input
+                type="checkbox"
+                checked={discard}
+                onChange={(e) => setDiscard(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Discard my local edits to{" "}
+                <span className="font-mono">{conflictNames.join(", ")}</span> and take upstream's
+                version — this cannot be undone from here (a store snapshot is taken first;{" "}
+                <code className="font-mono">loadout restore</code> can bring them back).
+              </span>
+            </label>
+          ) : null}
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={() => apply.mutate()}
+              disabled={apply.isPending || (!writes && !(discard && conflictNames.length > 0))}
+              className="btn-ember"
+            >
+              {apply.isPending
+                ? "Applying…"
+                : discard && conflictNames.length > 0
+                  ? "Apply + discard local edits"
+                  : "Apply updates"}
+            </button>
+            <button onClick={() => setPlanData(null)} className="btn-ghost">
+              Cancel
+            </button>
+            {conflictNames.length > 0 && !discard ? (
+              <span className="text-xs text-ink-faint">conflicted skills will be skipped</span>
+            ) : null}
+          </div>
+          {apply.isError ? (
+            <p className="stamp mt-2 text-xs text-danger">{String(apply.error)}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {apply.isSuccess && !planData ? (
+        <p className="stamp mt-3 text-xs text-sync">
+          ■ store updated — run <code className="font-mono">loadout sync</code> (or the Sync dock) to
+          roll changes out to your agents.
+        </p>
+      ) : null}
     </div>
   );
 }

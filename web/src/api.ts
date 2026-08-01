@@ -48,6 +48,22 @@ export type Source = { name: string; url: string; ref?: string; commit: string; 
 export type SourceCheck = { name: string; pinned: string; remote: string; hasUpdate: boolean; error?: string };
 export type SourceAddResult = { ref: Source; added: string[]; skipped: string[] };
 
+export type SourceUpdatePlan = {
+  source: string;
+  from: string;
+  to: string;
+  upToDate: boolean;
+  log: string[];
+  changed: string[];
+  added: string[];
+  locallyEdited: string[];
+  conflicts: string[];
+  ownedElsewhere: string[];
+  legacyBaseline: string[];
+  removed: string[];
+};
+export type SourceUpdatePlanResponse = { plans: SourceUpdatePlan[]; token: string };
+
 export type WizardOption = { value: string; label: string };
 export type WizardQuestion = {
   id: string;
@@ -179,6 +195,13 @@ export const api = {
   sourcesAdd: (input: { name?: string; url: string; ref?: string; subdir?: string }) =>
     request<SourceAddResult>("/api/sources/add", { method: "POST", body: JSON.stringify(input) }),
   sourcesCheck: () => request<SourceCheck[]>("/api/sources/check", { method: "POST", body: "{}" }),
+  sourcesUpdatePlan: () =>
+    request<SourceUpdatePlanResponse>("/api/sources/update/plan", { method: "POST", body: "{}" }),
+  sourcesUpdateApply: (token: string, forceDiscard: boolean) =>
+    request<{ applied: number }>("/api/sources/update/apply", {
+      method: "POST",
+      body: JSON.stringify({ token, forceDiscard }),
+    }),
   wizardSchema: () => request<WizardSchema>("/api/wizard/schema"),
   wizardPresets: () => request<string[]>("/api/wizard/presets"),
   wizardPlan: (answers: Answers, preset?: string) =>
