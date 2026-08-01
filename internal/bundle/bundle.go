@@ -348,6 +348,32 @@ func PlanImport(s *store.Store, src string) (*ImportPlan, error) {
 	return plan, nil
 }
 
+// OverwritePaths returns the store-relative paths Apply would overwrite
+// under the given policy — the set a pre-apply snapshot must capture. Pure
+// additions (new artifacts, profiles, library entries) need no backup; the
+// metadata files are included whenever the apply mutates anything, since
+// they are rewritten alongside.
+func (p *ImportPlan) OverwritePaths(s *store.Store, overwrite bool) []string {
+	var out []string
+	if overwrite {
+		for _, art := range p.Conflicts {
+			if local, ok := s.Artifact(art.ID); ok {
+				out = append(out, local.Path)
+			}
+		}
+		for _, name := range p.ConflictProfiles {
+			out = append(out, "profiles/"+name+".yaml")
+		}
+		if len(p.ConflictGroups) > 0 {
+			out = append(out, "library/groups.yaml")
+		}
+	}
+	if p.Changes(overwrite) > 0 {
+		out = append(out, store.ManifestFile, "sources.lock.yaml")
+	}
+	return out
+}
+
 // copyArtifactFiles copies one artifact's file(s) (single file or whole
 // directory) from srcRoot to destRoot, replacing whatever's already at the
 // destination. Shared by Apply (import) and ExportSelected (export).
@@ -421,7 +447,7 @@ func Apply(s *store.Store, p *ImportPlan, overwrite bool) ([]string, error) {
 		if err != nil {
 			return applied, err
 		}
-		if err := os.WriteFile(filepath.Join(s.Root, "sources.lock.yaml"), raw, 0o644); err != nil {
+		if err := store.WriteFileAtomic(filepath.Join(s.Root, "sources.lock.yaml"), raw, 0o644); err != nil {
 			return applied, err
 		}
 	}

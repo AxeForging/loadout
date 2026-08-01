@@ -227,6 +227,9 @@ func bundleCmd() *cli.Command {
 					}
 					var applied []string
 					if err := withStoreLock(func() error {
+						if err := snapshotStorePaths("bundle-import", s.Root, plan.OverwritePaths(s, overwrite)); err != nil {
+							return err
+						}
 						var applyErr error
 						applied, applyErr = bundle.Apply(s, plan, overwrite)
 						return applyErr

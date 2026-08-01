@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/AxeForging/loadout/internal/adapter"
 	"github.com/AxeForging/loadout/internal/adapter/antigravity"
@@ -46,6 +47,27 @@ func withStoreLock(fn func() error) error {
 	}
 	defer unlock()
 	return fn()
+}
+
+// snapshotStorePaths takes the fail-closed pre-write backup of store files a
+// mutation is about to overwrite (spec 008): no snapshot, no write. A nil
+// paths slice (pure addition) is a no-op.
+func snapshotStorePaths(trigger, storeRoot string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	backupDir, err := config.BackupsDir()
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if _, err := engine.SnapshotStorePaths(backupDir, trigger, storeRoot, paths, cfg.BackupsKeep(), time.Now()); err != nil {
+		return fmt.Errorf("pre-write store snapshot failed — nothing was changed: %w", err)
+	}
+	return nil
 }
 
 // resolveStorePath applies precedence: --store flag > config file > default.

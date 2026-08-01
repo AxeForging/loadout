@@ -48,7 +48,8 @@
       "Bash(go get *)",
       "Bash(lefthook install *)",
       "Bash(git add *)",
-      "Bash(git commit --quiet -m 'feat: atomic metadata writes and single-writer store lock *)"
+      "Bash(git commit --quiet -m 'feat: atomic metadata writes and single-writer store lock *)",
+      "Bash(git commit --quiet -m 'feat: snapshot store files before source-update/bundle-import writes *)"
     ]
   }
 }

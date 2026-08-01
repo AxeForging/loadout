@@ -87,7 +87,12 @@ func updateCmd() *cli.Command {
 					fmt.Println("  skipped.")
 					continue
 				}
-				if err := withStoreLock(func() error { return m.ApplyUpdate(plan, force) }); err != nil {
+				if err := withStoreLock(func() error {
+					if err := snapshotStorePaths("source-update", m.Store.Root, m.UpdateWritePaths(plan, force)); err != nil {
+						return err
+					}
+					return m.ApplyUpdate(plan, force)
+				}); err != nil {
 					return err
 				}
 				applied++

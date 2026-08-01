@@ -116,3 +116,41 @@ func TestUpdate_ConflictNeedsForceDiscard(t *testing.T) {
 		t.Fatalf("--force-discard should have applied upstream alpha:\n%s", raw)
 	}
 }
+
+// TestUpdate_SnapshotsStoreAndRestoreRecovers: applying a source update
+// snapshots the store files it overwrites; loadout restore brings the old
+// content back.
+func TestUpdate_SnapshotsStoreAndRestoreRecovers(t *testing.T) {
+	e := newEnv(t)
+	upstream := makeUpstream2(t)
+	e.mustRun("init")
+	e.mustRun("source", "add", upstream, "--name", "team-skills")
+
+	commitUpstreamSkill(t, upstream, "alpha", "alpha v2", "feat: rework alpha")
+	e.mustRun("update", "--yes")
+	raw, _ := os.ReadFile(storeSkillPath(e, "alpha"))
+	if !strings.Contains(string(raw), "alpha v2") {
+		t.Fatalf("update did not apply:\n%s", raw)
+	}
+
+	out := e.mustRun("restore")
+	if !strings.Contains(out, "source-update") {
+		t.Fatalf("restore list should contain a source-update snapshot:\n%s", out)
+	}
+	var snapID string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "source-update") {
+			snapID = strings.Fields(line)[0]
+			break
+		}
+	}
+	if snapID == "" {
+		t.Fatal("no snapshot id parsed")
+	}
+
+	e.mustRun("restore", snapID, "--yes")
+	raw, _ = os.ReadFile(storeSkillPath(e, "alpha"))
+	if !strings.Contains(string(raw), "alpha v1") {
+		t.Fatalf("restore did not bring back the pre-update content:\n%s", raw)
+	}
+}

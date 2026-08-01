@@ -262,6 +262,31 @@ func (m *Manager) ApplyUpdate(p *UpdatePlan, forceDiscard bool) error {
 	return m.saveLock(refs)
 }
 
+// UpdateWritePaths returns the store-relative paths ApplyUpdate would
+// overwrite with the given force setting — the set the orchestrating layer
+// (CLI/web) snapshots before applying, fail closed. Empty when the apply
+// would write nothing.
+func (m *Manager) UpdateWritePaths(p *UpdatePlan, forceDiscard bool) []string {
+	var out []string
+	add := func(sks []SkillDir) {
+		for _, sk := range sks {
+			if art, ok := m.Store.Artifact(sk.Name); ok {
+				out = append(out, art.Path)
+			}
+		}
+	}
+	add(p.Changed)
+	if forceDiscard {
+		add(p.Conflicts)
+	}
+	mutates := len(out) > 0 || len(p.Added) > 0 || len(p.RemovedIDs) > 0 ||
+		len(p.rebaseline) > 0 || p.NewCommit != p.Ref.Commit
+	if mutates {
+		out = append(out, store.ManifestFile, LockFile)
+	}
+	return out
+}
+
 // setSourceHashInMemory mutates the manifest entry without saving — callers
 // batch mutations and save once.
 func (m *Manager) setSourceHashInMemory(id, hash string) {

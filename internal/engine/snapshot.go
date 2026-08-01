@@ -136,6 +136,40 @@ func captureSnapshot(backupDir, trigger string, targets []snapTarget, now time.T
 	return snap, nil
 }
 
+// SnapshotAgent is the pseudo agent ID under which store-file backups live
+// inside a snapshot's files/ tree (spec 008: source updates and bundle
+// imports snapshot the store the same way syncs snapshot agent homes).
+const SnapshotAgent = domain.AgentID("store")
+
+// SnapshotStorePaths backs up the given store-relative paths (files or whole
+// artifact directories) before a store mutation overwrites them, then prunes.
+// Paths that do not exist are skipped, so a pure addition yields (nil, nil)
+// and no snapshot. Callers must fail closed: no snapshot result on error, no
+// write.
+func SnapshotStorePaths(backupDir, trigger, storeRoot string, relPaths []string, keep int, now time.Time) (*Snapshot, error) {
+	targets := make([]snapTarget, 0, len(relPaths))
+	for _, rel := range relPaths {
+		abs := filepath.Join(storeRoot, filepath.FromSlash(rel))
+		info, err := os.Stat(abs)
+		if err != nil {
+			continue // nothing on disk to preserve; captureSnapshot re-checks
+		}
+		targets = append(targets, snapTarget{
+			agent: SnapshotAgent, relPath: rel, absPath: abs,
+			op: OpUpdate, mode: info.Mode(), isDir: info.IsDir(),
+			root: adapter.RootAgentHome,
+		})
+	}
+	snap, err := captureSnapshot(backupDir, trigger, targets, now)
+	if err != nil {
+		return nil, err
+	}
+	if err := pruneSnapshots(backupDir, keep); err != nil {
+		return nil, err
+	}
+	return snap, nil
+}
+
 // reserveSnapshotDir creates a unique snapshot directory named for the current
 // time, disambiguating same-second collisions with a numeric suffix.
 func reserveSnapshotDir(backupDir string, now time.Time) (dir, id string, err error) {
