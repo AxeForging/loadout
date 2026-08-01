@@ -206,6 +206,16 @@ func (m *Manager) ApplyUpdate(p *UpdatePlan, forceDiscard bool) error {
 	if forceDiscard {
 		write = append(write, p.Conflicts...)
 	}
+	// The plan's skill paths point into the shared cache clone. A newer plan
+	// (e.g. a second web token) refreshes that clone, so applying a stale
+	// plan would copy content nobody reviewed. Verify the clone still sits
+	// at the planned commit before touching anything.
+	if len(write)+len(p.Added) > 0 {
+		head, err := git(context.Background(), p.cloneDir, "rev-parse", "HEAD")
+		if err != nil || head != p.NewCommit {
+			return fmt.Errorf("source %q moved since this plan was made (clone at %.10s, planned %.10s) — nothing was changed, re-plan the update", p.Ref.Name, head, p.NewCommit)
+		}
+	}
 	for _, sk := range write {
 		art, ok := m.Store.Artifact(sk.localName())
 		if !ok {

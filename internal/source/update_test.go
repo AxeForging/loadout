@@ -249,3 +249,33 @@ func TestApplyUpdate_FirstUpdateStampsMissingBaselines(t *testing.T) {
 		t.Error("pristine legacy skill should have its baseline backfilled on apply")
 	}
 }
+
+// TestApplyUpdate_StalePlanAgainstRefreshedCloneIsRejected: pending plans
+// (web tokens) reference the shared cache clone; a newer plan refreshes that
+// clone, so applying the older plan would write content nobody reviewed.
+func TestApplyUpdate_StalePlanAgainstRefreshedCloneIsRejected(t *testing.T) {
+	u := newUpstream(t)
+	u.writeSkill("alpha", "alpha v1")
+	u.commit("initial")
+
+	m := newManager(t)
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	u.writeSkill("alpha", "alpha v2")
+	u.commit("v2")
+	stale := mustPlanUpdate(t, m, "src")
+
+	// A second plan moves the shared clone past the first plan's commit.
+	u.writeSkill("alpha", "alpha v3")
+	u.commit("v3")
+	_ = mustPlanUpdate(t, m, "src")
+
+	if err := m.ApplyUpdate(stale, false); err == nil {
+		t.Fatal("applying a stale plan against a refreshed clone must error, not write unreviewed content")
+	}
+	raw, _ := os.ReadFile(filepath.Join(m.Store.Root, "skills", "alpha", "SKILL.md"))
+	if !strings.Contains(string(raw), "alpha v1") {
+		t.Fatalf("store must be untouched after a rejected stale apply:\n%s", raw)
+	}
+}
