@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/AxeForging/loadout/internal/config"
 	"github.com/AxeForging/loadout/internal/web"
 	"github.com/urfave/cli/v3"
 )
@@ -34,8 +35,12 @@ func serveCmd() *cli.Command {
 				return err
 			}
 			mgr.Store = eng.Store
+			data, err := config.DataDir()
+			if err != nil {
+				return err
+			}
 			fmt.Printf("loadout web UI: http://%s\n", cmd.String("addr"))
-			srv := web.New(web.Options{Addr: cmd.String("addr"), Engine: eng, Sources: mgr, Dev: cmd.Bool("dev")})
+			srv := web.New(web.Options{Addr: cmd.String("addr"), Engine: eng, Sources: mgr, DataDir: data, Dev: cmd.Bool("dev")})
 			return srv.ListenAndServe(ctx)
 		},
 	}
