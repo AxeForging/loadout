@@ -39,6 +39,11 @@ Who is affected: anyone who customizes an imported skill (the moment loadout's o
 12. **MUST** add `POST /api/sources/update/plan` (returns per-skill classification + a one-shot plan token) and `POST /api/sources/update/apply` (consumes the token, optional `forceDiscard`), mirroring the existing two-phase sync gate; apply without a valid token is rejected. The SPA sources page gains the corresponding update flow (plan modal with classification, apply button, discard requiring an explicit checkbox).
 13. **MUST** show the cached update-available count (the CLI hint cache) on the TUI dashboard as a read-only hint line; the TUI gains no apply affordance.
 
+### Skill aliasing
+
+15. **MUST** support importing a source skill under a different local name (alias): `loadout source add --alias <upstream>=<local>` (repeatable) at registration, and `loadout source import <source> <upstream> --as <local>` for a skill previously skipped due to a name collision. The artifact records its real upstream name (`sourceName` in the manifest, empty when identical to the ID), and update classification, `diff --upstream` and removal-relabeling all resolve through it — an aliased skill still tracks the REAL upstream skill's changes.
+16. **MUST** keep collision behavior safe: an alias targeting an existing artifact ID errors; a skill skipped at `source add` time is reported with a hint to import it under an alias.
+
 ### Documentation
 
 14. **MUST** update README in the same PR: `update` classification vocabulary and `--force-discard`, `diff --upstream`, `source list` state column, store snapshots in the `restore` section, the lock error, and the new web endpoints — with a worked example of the locally-edited → conflict → force-discard flow. Completion scripts updated for new flags.

@@ -154,3 +154,41 @@ func TestUpdate_SnapshotsStoreAndRestoreRecovers(t *testing.T) {
 		t.Fatalf("restore did not bring back the pre-update content:\n%s", raw)
 	}
 }
+
+// TestSourceAlias_ImportAndUpdateFlow: a skill whose name collides with a
+// local artifact can be imported under an alias (at add time or later via
+// source import) and still tracks the REAL upstream skill on updates.
+func TestSourceAlias_ImportAndUpdateFlow(t *testing.T) {
+	e := newEnv(t)
+	upstream := makeUpstream2(t) // upstream has: alpha, beta
+	e.mustRun("init")
+	e.mustRun("new", "skill", "alpha") // user already owns "alpha"
+
+	// Without an alias the colliding skill is skipped, with a hint.
+	out := e.mustRun("source", "add", upstream, "--name", "team-skills")
+	if !strings.Contains(out, "skipped alpha") || !strings.Contains(out, "source import") {
+		t.Fatalf("skip should hint at source import:\n%s", out)
+	}
+
+	// Import it under an alias after the fact.
+	out = e.mustRun("source", "import", "team-skills", "alpha", "--as", "team-alpha")
+	if !strings.Contains(out, `as "team-alpha"`) || !strings.Contains(out, `upstream "alpha"`) {
+		t.Fatalf("import output should show the alias mapping:\n%s", out)
+	}
+
+	// The REAL upstream skill changes → the alias updates, the user's own
+	// "alpha" artifact is never touched.
+	commitUpstreamSkill(t, upstream, "alpha", "alpha v2", "feat: rework alpha")
+	out = e.mustRun("update", "--yes")
+	if !strings.Contains(out, "alpha (as team-alpha)") {
+		t.Fatalf("plan should label the aliased skill:\n%s", out)
+	}
+	raw, _ := os.ReadFile(storeSkillPath(e, "team-alpha"))
+	if !strings.Contains(string(raw), "alpha v2") {
+		t.Fatalf("aliased skill not updated:\n%s", raw)
+	}
+	raw, _ = os.ReadFile(storeSkillPath(e, "alpha"))
+	if strings.Contains(string(raw), "alpha v2") {
+		t.Fatal("user-owned alpha was overwritten through the alias")
+	}
+}

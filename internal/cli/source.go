@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/AxeForging/loadout/internal/config"
+	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/source"
 	"github.com/urfave/cli/v3"
 )
@@ -23,6 +24,22 @@ func newSourceManager(cmd *cli.Command) (*source.Manager, error) {
 		return nil, err
 	}
 	return &source.Manager{Store: s, CacheDir: filepath.Join(data, "sources")}, nil
+}
+
+// parseAliases turns repeated --alias upstream=local flags into a map.
+func parseAliases(raw []string) (map[string]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := map[string]string{}
+	for _, pair := range raw {
+		upstream, local, ok := strings.Cut(pair, "=")
+		if !ok || upstream == "" || local == "" {
+			return nil, fmt.Errorf("invalid --alias %q: use <upstream-skill>=<local-name>", pair)
+		}
+		out[upstream] = local
+	}
+	return out, nil
 }
 
 // summarizeStates renders a source's offline skill states for the list
@@ -58,6 +75,7 @@ func sourceCmd() *cli.Command {
 					&cli.StringFlag{Name: "name", Usage: "Source name (default: repository basename)"},
 					&cli.StringFlag{Name: "ref", Usage: "Branch or tag (default: remote default branch)"},
 					&cli.StringFlag{Name: "subdir", Usage: "Only discover skills under this subdirectory"},
+					&cli.StringSliceFlag{Name: "alias", Usage: "Import a skill under a different local name: --alias <upstream>=<local> (repeatable); updates keep tracking the real upstream skill"},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					url := cmd.Args().First()
@@ -68,6 +86,10 @@ func sourceCmd() *cli.Command {
 					if name == "" {
 						name = strings.TrimSuffix(filepath.Base(url), ".git")
 					}
+					aliases, err := parseAliases(cmd.StringSlice("alias"))
+					if err != nil {
+						return err
+					}
 					m, err := newSourceManager(cmd)
 					if err != nil {
 						return err
@@ -75,7 +97,7 @@ func sourceCmd() *cli.Command {
 					var res source.AddResult
 					if err := withStoreLock(func() error {
 						var addErr error
-						res, addErr = m.Add(ctx, name, url, cmd.String("ref"), cmd.String("subdir"))
+						res, addErr = m.Add(ctx, name, url, cmd.String("ref"), cmd.String("subdir"), aliases)
 						return addErr
 					}); err != nil {
 						return err
@@ -85,9 +107,42 @@ func sourceCmd() *cli.Command {
 						fmt.Printf("  + skill %s\n", id)
 					}
 					for _, id := range res.Skipped {
-						fmt.Printf("  ~ skipped %s (an artifact with this name already exists)\n", id)
+						fmt.Printf("  ~ skipped %s (an artifact with this name already exists — import it under another name with 'loadout source import %s %s --as <local-name>')\n", id, name, id)
 					}
 					fmt.Println("Run 'loadout sync' to install the imported skills.")
+					return nil
+				},
+			},
+			{
+				Name:      "import",
+				Usage:     "Import one skill from a registered source under a local alias (keeps tracking the real upstream skill)",
+				ArgsUsage: "<source> <upstream-skill>",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "as", Usage: "Local artifact name (default: the upstream name)"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					src, upstream := cmd.Args().Get(0), cmd.Args().Get(1)
+					if src == "" || upstream == "" {
+						return fmt.Errorf("usage: loadout source import <source> <upstream-skill> [--as <local-name>]")
+					}
+					m, err := newSourceManager(cmd)
+					if err != nil {
+						return err
+					}
+					var art domain.Artifact
+					if err := withStoreLock(func() error {
+						var impErr error
+						art, impErr = m.ImportSkill(ctx, src, upstream, cmd.String("as"))
+						return impErr
+					}); err != nil {
+						return err
+					}
+					if art.SourceName != "" {
+						fmt.Printf("Imported %s as %q — updates keep tracking upstream %q.\n", upstream, art.ID, art.SourceName)
+					} else {
+						fmt.Printf("Imported %s from source %q.\n", art.ID, src)
+					}
+					fmt.Println("Run 'loadout sync' to install it.")
 					return nil
 				},
 			},

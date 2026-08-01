@@ -311,7 +311,7 @@ type sourcePlanJSON struct {
 func skillNames(sks []source.SkillDir) []string {
 	out := make([]string, 0, len(sks))
 	for _, sk := range sks {
-		out = append(out, sk.Name)
+		out = append(out, sk.Label())
 	}
 	return out
 }
@@ -548,6 +548,8 @@ func (s *Server) handleSourcesAdd(w http.ResponseWriter, r *http.Request) {
 		URL    string `json:"url"`
 		Ref    string `json:"ref"`
 		Subdir string `json:"subdir"`
+		// Aliases maps upstream skill names to local artifact names.
+		Aliases map[string]string `json:"aliases"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
@@ -564,7 +566,13 @@ func (s *Server) handleSourcesAdd(w http.ResponseWriter, r *http.Request) {
 	// Cloning a dead or slow remote must not hang the request forever.
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
-	result, err := s.opts.Sources.Add(ctx, name, req.URL, req.Ref, req.Subdir)
+	unlock, err := s.lockStore()
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	defer unlock()
+	result, err := s.opts.Sources.Add(ctx, name, req.URL, req.Ref, req.Subdir, req.Aliases)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return

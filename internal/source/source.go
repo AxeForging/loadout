@@ -78,8 +78,10 @@ type AddResult struct {
 }
 
 // Add clones the repository, discovers skills, imports them into the store
-// with origin source:<name>, and pins the commit in the lock file.
-func (m *Manager) Add(ctx context.Context, name, url, ref, subdir string) (AddResult, error) {
+// with origin source:<name>, and pins the commit in the lock file. Aliases
+// maps an upstream skill name to the local name it should be imported under
+// (spec 008 R15) — the artifact keeps tracking the real upstream skill.
+func (m *Manager) Add(ctx context.Context, name, url, ref, subdir string, aliases map[string]string) (AddResult, error) {
 	if err := store.ValidateName(name); err != nil {
 		return AddResult{}, err
 	}
@@ -106,17 +108,30 @@ func (m *Manager) Add(ctx context.Context, name, url, ref, subdir string) (AddRe
 	if len(skills) == 0 {
 		return AddResult{}, fmt.Errorf("no skills found in %s (expected directories containing SKILL.md)", url)
 	}
+	known := map[string]bool{}
+	for _, sk := range skills {
+		known[sk.Name] = true
+	}
+	for upstream := range aliases {
+		if !known[upstream] {
+			return AddResult{}, fmt.Errorf("--alias %s=%s: source has no skill %q", upstream, aliases[upstream], upstream)
+		}
+	}
 
 	result := AddResult{Ref: domain.SourceRef{Name: name, URL: url, Ref: ref, Commit: commit, Subdir: subdir}}
 	for _, sk := range skills {
-		if _, exists := m.Store.Artifact(sk.Name); exists {
+		localName := sk.Name
+		if alias, ok := aliases[sk.Name]; ok {
+			localName = alias
+		}
+		if _, exists := m.Store.Artifact(localName); exists {
 			result.Skipped = append(result.Skipped, sk.Name)
 			continue
 		}
-		if _, err := m.Store.AdoptFrom(domain.KindSkill, sk.Name, sk.Path, domain.OriginSource(name)); err != nil {
+		if _, err := m.Store.AdoptAs(domain.KindSkill, localName, sk.Path, domain.OriginSource(name), sk.Name); err != nil {
 			return AddResult{}, fmt.Errorf("import skill %s: %w", sk.Name, err)
 		}
-		result.Added = append(result.Added, sk.Name)
+		result.Added = append(result.Added, localName)
 	}
 
 	refs, err := m.Lock()
@@ -127,6 +142,49 @@ func (m *Manager) Add(ctx context.Context, name, url, ref, subdir string) (AddRe
 		return AddResult{}, err
 	}
 	return result, nil
+}
+
+// ImportSkill imports one skill from an already-registered source under a
+// local name — the escape hatch for skills skipped at add time because the
+// name was taken. The artifact records the real upstream name so updates and
+// upstream diffs keep tracking the original skill.
+func (m *Manager) ImportSkill(ctx context.Context, sourceName, upstreamName, localName string) (domain.Artifact, error) {
+	ref, _, err := m.find(sourceName)
+	if err != nil {
+		return domain.Artifact{}, err
+	}
+	if localName == "" {
+		localName = upstreamName
+	}
+	if _, exists := m.Store.Artifact(localName); exists {
+		return domain.Artifact{}, fmt.Errorf("artifact %q already exists — pick another local name with --as", localName)
+	}
+	dir := filepath.Join(m.CacheDir, sourceName)
+	if _, err := cloneFull(ctx, ref.URL, ref.Ref, dir); err != nil {
+		return domain.Artifact{}, err
+	}
+	skills, err := DiscoverSkills(dir, ref.Subdir)
+	if err != nil {
+		return domain.Artifact{}, err
+	}
+	for _, sk := range skills {
+		if sk.Name == upstreamName {
+			return m.Store.AdoptAs(domain.KindSkill, localName, sk.Path, domain.OriginSource(sourceName), upstreamName)
+		}
+	}
+	return domain.Artifact{}, fmt.Errorf("source %q has no skill %q (see 'loadout update' output or the repo)", sourceName, upstreamName)
+}
+
+// artifactsByUpstream maps each of a source's artifacts by its upstream
+// skill name (alias-aware), for matching discovered skills to the store.
+func (m *Manager) artifactsByUpstream(origin string) map[string]domain.Artifact {
+	out := map[string]domain.Artifact{}
+	for _, a := range m.Store.Manifest.Artifacts {
+		if a.Origin == origin {
+			out[a.UpstreamName()] = a
+		}
+	}
+	return out
 }
 
 // Remove drops a source from the lock file. Imported artifacts stay unless
@@ -208,10 +266,22 @@ func (m *Manager) SkillStates(name string) (map[string]SkillState, error) {
 	return out, nil
 }
 
-// SkillDir is a discovered skill inside a source clone.
+// SkillDir is a discovered skill inside a source clone. Name is the
+// upstream name; LocalID is the store artifact it maps to once planning has
+// resolved aliases (empty until then, or for skills not yet imported).
 type SkillDir struct {
-	Name string
-	Path string
+	Name    string
+	Path    string
+	LocalID string
+}
+
+// Label renders a skill for plan output: the upstream name, plus the local
+// alias when they differ.
+func (sk SkillDir) Label() string {
+	if sk.LocalID != "" && sk.LocalID != sk.Name {
+		return sk.Name + " (as " + sk.LocalID + ")"
+	}
+	return sk.Name
 }
 
 // DiscoverSkills finds directories containing a SKILL.md beneath root/subdir.

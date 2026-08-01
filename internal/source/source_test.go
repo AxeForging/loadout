@@ -77,7 +77,7 @@ func TestAdd_ImportsSkillsAndPinsCommit(t *testing.T) {
 	commit := u.commit("initial")
 
 	m := newManager(t)
-	res, err := m.Add(context.Background(), "team-skills", u.dir, "main", "")
+	res, err := m.Add(context.Background(), "team-skills", u.dir, "main", "", nil)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestAdd_SkipsArtifactsThatAlreadyExist(t *testing.T) {
 	if _, err := m.Store.New(domain.KindSkill, "review"); err != nil {
 		t.Fatal(err)
 	}
-	res, err := m.Add(context.Background(), "src", u.dir, "main", "")
+	res, err := m.Add(context.Background(), "src", u.dir, "main", "", nil)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestCheck_ReportsUpdateOnlyWhenRemoteMoved(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,7 +160,7 @@ func TestUpdate_AppliesChangedAndAddedSkillsAndMovesPin(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,7 +208,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -267,7 +267,7 @@ func TestRemove_PurgeDeletesImportedArtifacts(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	removed, err := m.Remove("src", true)

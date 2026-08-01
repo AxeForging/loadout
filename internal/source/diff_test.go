@@ -14,7 +14,7 @@ func TestUpstreamDiff_ShowsStoreVsUpstream(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	editStoreSkill(t, m, "alpha", "my local body")
@@ -37,7 +37,7 @@ func TestUpstreamDiff_IdenticalContentYieldsEmpty(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	text, err := m.UpstreamDiff(context.Background(), "alpha")
@@ -70,7 +70,7 @@ func TestSkillStates_OkEditedLegacy(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	editStoreSkill(t, m, "tweaked", "user changed this")

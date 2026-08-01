@@ -116,22 +116,22 @@ func printUpdatePlan(plan *source.UpdatePlan, force bool) {
 	}
 	for _, sk := range plan.Changed {
 		if legacy[sk.Name] {
-			fmt.Printf("  ~ update skill %s (no import baseline recorded — local edits, if any, were undetectable)\n", sk.Name)
+			fmt.Printf("  ~ update skill %s (no import baseline recorded — local edits, if any, were undetectable)\n", sk.Label())
 		} else {
-			fmt.Printf("  ~ update skill %s (upstream changed)\n", sk.Name)
+			fmt.Printf("  ~ update skill %s (upstream changed)\n", sk.Label())
 		}
 	}
 	for _, sk := range plan.Added {
 		fmt.Printf("  + new skill %s\n", sk.Name)
 	}
 	for _, sk := range plan.LocallyEdited {
-		fmt.Printf("  ! skill %s locally edited — left alone (upstream unchanged)\n", sk.Name)
+		fmt.Printf("  ! skill %s locally edited — left alone (upstream unchanged)\n", sk.Label())
 	}
 	for _, sk := range plan.Conflicts {
 		if force {
-			fmt.Printf("  !! skill %s — conflict: your local edits WILL BE DISCARDED for upstream's version\n", sk.Name)
+			fmt.Printf("  !! skill %s — conflict: your local edits WILL BE DISCARDED for upstream's version\n", sk.Label())
 		} else {
-			fmt.Printf("  !! skill %s — conflict: edited locally AND changed upstream; skipped (inspect with 'loadout diff %s --upstream', apply with --force-discard)\n", sk.Name, sk.Name)
+			fmt.Printf("  !! skill %s — conflict: edited locally AND changed upstream; skipped (inspect with 'loadout diff %s --upstream', apply with --force-discard)\n", sk.Label(), sk.LocalID)
 		}
 	}
 	for _, id := range plan.OwnedElsewhere {

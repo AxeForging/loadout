@@ -34,15 +34,16 @@ func (m *Manager) UpstreamDiff(ctx context.Context, skillID string) (string, err
 	if err != nil {
 		return "", err
 	}
+	upstreamName := art.UpstreamName()
 	var upstream *SkillDir
 	for i := range skills {
-		if skills[i].Name == skillID {
+		if skills[i].Name == upstreamName {
 			upstream = &skills[i]
 			break
 		}
 	}
 	if upstream == nil {
-		return "", fmt.Errorf("skill %q no longer exists upstream in source %q", skillID, srcName)
+		return "", fmt.Errorf("skill %q no longer exists upstream in source %q", upstreamName, srcName)
 	}
 
 	current, err := m.Store.Content(art)
@@ -77,7 +78,7 @@ func (m *Manager) UpstreamDiff(ctx context.Context, skillID string) (string, err
 			A:        difflib.SplitLines(string(local)),
 			B:        difflib.SplitLines(string(upstreamRaw)),
 			FromFile: "store/" + art.Path + "/" + p,
-			ToFile:   "upstream/" + srcName + "/" + skillID + "/" + p,
+			ToFile:   "upstream/" + srcName + "/" + upstreamName + "/" + p,
 			Context:  3,
 		})
 		if err != nil {

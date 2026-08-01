@@ -32,7 +32,7 @@ func TestPlanUpdate_LocalEditWithUnrelatedUpstreamCommitIsLocallyEdited(t *testi
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	editStoreSkill(t, m, "alpha", "customized")
@@ -69,7 +69,7 @@ func TestPlanUpdate_BothSidesMovedIsConflict_GatedByForceDiscard(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	editStoreSkill(t, m, "alpha", "customized")
@@ -133,7 +133,7 @@ func TestPlanUpdate_MissingBaselineBackfilledFromPinnedCommit(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Simulate a pre-008 store: no recorded baseline.
@@ -162,7 +162,7 @@ func TestPlanUpdate_UnreachablePinDegradesToLabeledLegacy(t *testing.T) {
 	m := newManager(t)
 	// file:// forces a real fetch (a plain local path would hardlink the
 	// whole object store, keeping even rewritten-away commits reachable).
-	if _, err := m.Add(context.Background(), "src", "file://"+u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", "file://"+u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	clearSourceHash(t, m, "alpha")
@@ -192,7 +192,7 @@ func TestPlanUpdate_UpstreamNameCollisionReportedAsOwnedElsewhere(t *testing.T) 
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Store.New(domain.KindSkill, "mine"); err != nil {
@@ -216,7 +216,7 @@ func TestApplyUpdate_FirstUpdateStampsMissingBaselines(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Pre-008 store: pristine content, no baseline recorded.

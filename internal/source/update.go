@@ -118,26 +118,28 @@ func (m *Manager) PlanUpdate(ctx context.Context, name string) (*UpdatePlan, err
 	for _, sk := range skills {
 		upstream[sk.Name] = sk
 	}
+	byUpstream := m.artifactsByUpstream(origin)
 
 	for _, sk := range skills {
-		art, exists := m.Store.Artifact(sk.Name)
-		switch {
-		case !exists:
-			if !plan.UpToDate {
-				plan.Added = append(plan.Added, sk)
-			}
-		case art.Origin != origin:
-			plan.OwnedElsewhere = append(plan.OwnedElsewhere, sk.Name)
-		default:
+		if art, owned := byUpstream[sk.Name]; owned {
+			sk.LocalID = art.ID
 			if err := m.classifySkill(ctx, plan, art, sk); err != nil {
 				return nil, err
 			}
+			continue
+		}
+		if _, taken := m.Store.Artifact(sk.Name); taken {
+			plan.OwnedElsewhere = append(plan.OwnedElsewhere, sk.Name)
+			continue
+		}
+		if !plan.UpToDate {
+			plan.Added = append(plan.Added, sk)
 		}
 	}
 	if !plan.UpToDate {
 		for _, art := range m.Store.Manifest.Artifacts {
 			if art.Origin == origin {
-				if _, still := upstream[art.ID]; !still {
+				if _, still := upstream[art.UpstreamName()]; !still {
 					plan.RemovedIDs = append(plan.RemovedIDs, art.ID)
 				}
 			}
@@ -205,7 +207,7 @@ func (m *Manager) ApplyUpdate(p *UpdatePlan, forceDiscard bool) error {
 		write = append(write, p.Conflicts...)
 	}
 	for _, sk := range write {
-		art, ok := m.Store.Artifact(sk.Name)
+		art, ok := m.Store.Artifact(sk.localName())
 		if !ok {
 			continue
 		}
@@ -220,7 +222,7 @@ func (m *Manager) ApplyUpdate(p *UpdatePlan, forceDiscard bool) error {
 		if err != nil {
 			return err
 		}
-		m.setSourceHashInMemory(sk.Name, h)
+		m.setSourceHashInMemory(sk.localName(), h)
 		dirty = true
 	}
 	for _, sk := range p.Added {
@@ -270,7 +272,7 @@ func (m *Manager) UpdateWritePaths(p *UpdatePlan, forceDiscard bool) []string {
 	var out []string
 	add := func(sks []SkillDir) {
 		for _, sk := range sks {
-			if art, ok := m.Store.Artifact(sk.Name); ok {
+			if art, ok := m.Store.Artifact(sk.localName()); ok {
 				out = append(out, art.Path)
 			}
 		}
@@ -285,6 +287,14 @@ func (m *Manager) UpdateWritePaths(p *UpdatePlan, forceDiscard bool) []string {
 		out = append(out, store.ManifestFile, LockFile)
 	}
 	return out
+}
+
+// localName is the store artifact ID a planned skill maps to (alias-aware).
+func (sk SkillDir) localName() string {
+	if sk.LocalID != "" {
+		return sk.LocalID
+	}
+	return sk.Name
 }
 
 // setSourceHashInMemory mutates the manifest entry without saving — callers

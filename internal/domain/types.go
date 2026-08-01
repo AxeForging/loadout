@@ -51,6 +51,19 @@ type Artifact struct {
 	// "upstream changed it" from "the user edited it locally". Empty for
 	// local artifacts and for stores created before the field existed.
 	SourceHash string `yaml:"sourceHash,omitempty"  json:"sourceHash,omitempty"`
+	// SourceName is the skill's REAL name in its upstream source when the
+	// artifact was imported under a local alias. Empty means the ID is the
+	// upstream name. Updates and upstream diffs resolve through it.
+	SourceName string `yaml:"sourceName,omitempty"  json:"sourceName,omitempty"`
+}
+
+// UpstreamName is the name an artifact has in its source repository — the
+// alias-aware counterpart of ID.
+func (a Artifact) UpstreamName() string {
+	if a.SourceName != "" {
+		return a.SourceName
+	}
+	return a.ID
 }
 
 // Defaults holds manifest-wide fallbacks.
