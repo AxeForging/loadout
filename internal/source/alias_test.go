@@ -62,9 +62,7 @@ func TestUpdate_AliasedSkillTracksRealUpstreamSkill(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Store.New(domain.KindSkill, "plan"); err != nil {
-		t.Fatal(err)
-	}
+	newLocalSkill(t, m, "plan")
 	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", map[string]string{"plan": "team-plan"}); err != nil {
 		t.Fatal(err)
 	}
@@ -74,10 +72,7 @@ func TestUpdate_AliasedSkillTracksRealUpstreamSkill(t *testing.T) {
 	u.writeSkill("plan", "upstream plan v2")
 	u.commit("rework plan")
 
-	plan, err := m.PlanUpdate(context.Background(), "src")
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan := mustPlanUpdate(t, m, "src")
 	if len(plan.Changed) != 1 || plan.Changed[0].Name != "plan" || plan.Changed[0].LocalID != "team-plan" {
 		t.Fatalf("Changed = %+v, want upstream plan mapped to team-plan", plan.Changed)
 	}

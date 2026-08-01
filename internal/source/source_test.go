@@ -220,9 +220,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	// It stays origin source:src but is now locally edited — updates must
 	// leave it alone. A user-owned (origin local) artifact must never be
 	// overwritten either:
-	if _, err := m.Store.New(domain.KindSkill, "mine"); err != nil {
-		t.Fatal(err)
-	}
+	newLocalSkill(t, m, "mine")
 
 	if err := os.RemoveAll(filepath.Join(u.dir, "goner")); err != nil {
 		t.Fatal(err)
@@ -230,10 +228,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	u.writeSkill("mine", "upstream impostor") // same name as the user's local skill
 	u.commit("v2")
 
-	plan, err := m.PlanUpdate(context.Background(), "src")
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan := mustPlanUpdate(t, m, "src")
 	for _, sk := range plan.Added {
 		if sk.Name == "mine" {
 			t.Error("upstream skill colliding with a local artifact must not be planned as added")

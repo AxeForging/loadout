@@ -25,6 +25,24 @@ func clearSourceHash(t *testing.T, m *Manager, name string) {
 	}
 }
 
+// newLocalSkill scaffolds a user-owned (origin local) artifact.
+func newLocalSkill(t *testing.T, m *Manager, name string) {
+	t.Helper()
+	if _, err := m.Store.New(domain.KindSkill, name); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// mustPlanUpdate plans an update for one source, failing the test on error.
+func mustPlanUpdate(t *testing.T, m *Manager, name string) *UpdatePlan {
+	t.Helper()
+	plan, err := m.PlanUpdate(context.Background(), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
 func TestPlanUpdate_LocalEditWithUnrelatedUpstreamCommitIsLocallyEdited(t *testing.T) {
 	u := newUpstream(t)
 	u.writeSkill("alpha", "alpha v1")
@@ -195,16 +213,11 @@ func TestPlanUpdate_UpstreamNameCollisionReportedAsOwnedElsewhere(t *testing.T) 
 	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Store.New(domain.KindSkill, "mine"); err != nil {
-		t.Fatal(err)
-	}
+	newLocalSkill(t, m, "mine")
 	u.writeSkill("mine", "upstream impostor")
 	u.commit("adds colliding skill")
 
-	plan, err := m.PlanUpdate(context.Background(), "src")
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan := mustPlanUpdate(t, m, "src")
 	if len(plan.OwnedElsewhere) != 1 || plan.OwnedElsewhere[0] != "mine" {
 		t.Errorf("OwnedElsewhere = %v, want [mine]", plan.OwnedElsewhere)
 	}

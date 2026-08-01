@@ -383,16 +383,9 @@ func (s *Server) handleSourcesUpdateApply(w http.ResponseWriter, r *http.Request
 		Token        string `json:"token"`
 		ForceDiscard bool   `json:"forceDiscard"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/sources/update/plan first"))
-		return
-	}
-	s.mu.Lock()
-	pending, ok := s.sourcePlans[req.Token]
-	delete(s.sourcePlans, req.Token)
-	s.mu.Unlock()
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	pending, ok := takePlan(s, w, req.Token, "/api/sources/update/plan", "re-plan and review again", s.sourcePlans)
 	if !ok {
-		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — re-plan and review again"))
 		return
 	}
 
@@ -489,16 +482,9 @@ func (s *Server) handleSyncApply(w http.ResponseWriter, r *http.Request) {
 		Token              string `json:"token"`
 		OverwriteConflicts bool   `json:"overwriteConflicts"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/sync/plan first"))
-		return
-	}
-	s.mu.Lock()
-	pending, ok := s.plans[req.Token]
-	delete(s.plans, req.Token)
-	s.mu.Unlock()
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	pending, ok := takePlan(s, w, req.Token, "/api/sync/plan", "re-plan and review again", s.plans)
 	if !ok {
-		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — re-plan and review again"))
 		return
 	}
 	// The token round-trip IS the confirmation: the client showed the plan
@@ -518,6 +504,26 @@ func newToken() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// takePlan consumes a one-shot plan token from a pending map, writing the
+// 400/409 responses every two-phase apply shares (sync, bundle import,
+// source update). ok=false means a response has already been written.
+func takePlan[T any](s *Server, w http.ResponseWriter, token, planPath, replanHint string, pending map[string]T) (T, bool) {
+	var zero T
+	if token == "" {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call %s first", planPath))
+		return zero, false
+	}
+	s.mu.Lock()
+	p, ok := pending[token]
+	delete(pending, token)
+	s.mu.Unlock()
+	if !ok {
+		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — %s", replanHint))
+		return zero, false
+	}
+	return p, true
 }
 
 // ---- sources ----
@@ -1025,16 +1031,9 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 		Token     string `json:"token"`
 		Overwrite bool   `json:"overwrite"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/bundle/import/plan first"))
-		return
-	}
-	s.mu.Lock()
-	pending, ok := s.bundlePlans[req.Token]
-	delete(s.bundlePlans, req.Token)
-	s.mu.Unlock()
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	pending, ok := takePlan(s, w, req.Token, "/api/bundle/import/plan", "re-upload and review again", s.bundlePlans)
 	if !ok {
-		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — re-upload and review again"))
 		return
 	}
 	defer pending.discard()
