@@ -32,7 +32,7 @@ func Lock(dataDir string) (unlock func(), err error) {
 			_, werr := f.Write(raw)
 			cerr := f.Close()
 			if werr != nil || cerr != nil {
-				os.Remove(path)
+				_ = os.Remove(path)
 				return nil, errors.Join(werr, cerr)
 			}
 			return func() { _ = os.Remove(path) }, nil

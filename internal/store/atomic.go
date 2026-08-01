@@ -19,8 +19,8 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	tmpName := tmp.Name()
 	cleanup := func() {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 	}
 	if _, err := tmp.Write(data); err != nil {
 		cleanup()
@@ -35,11 +35,11 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("close %s: %w", path, err)
 	}
 	if err := os.Chmod(tmpName, perm); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("rename %s: %w", path, err)
 	}
 	return nil

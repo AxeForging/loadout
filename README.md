@@ -61,15 +61,15 @@ loadout sync                     # install into detected agents (asks first)
 |---------|---------|
 | `loadout init` | Create the canonical store (git-friendly directory with a starter manifest) |
 | `loadout status [artifact...]` | Drift matrix: every artifact's sync state per agent |
-| `loadout diff [artifact...]` | Unified diffs of what sync would change |
+| `loadout diff [artifact...]` | Unified diffs of what sync would change — or `loadout diff <skill> --upstream` to diff a sourced skill against its upstream repo |
 | `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`, `--force`, `--project` for project-scoped MCP configs) |
 | `loadout install <agent>` | First-time full install into one agent (`--force`) |
-| `loadout restore [snapshot-id]` | List pre-write snapshots, or restore one (`--yes`) — recover files an overwrite replaced |
+| `loadout restore [snapshot-id]` | List pre-write snapshots, or restore one (`--yes`) — recover files an overwrite replaced, including store files a `source-update` or `bundle-import` rewrote |
 | `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command`, `hook` or `mcp` — or draft a skill with `--ai "description"` via your logged-in agent |
 | `loadout add <path>` | Adopt an existing native artifact (skill/hook/mcp dir, command/instruction file) into the store |
-| `loadout source add\|list\|remove <url>` | Track skills from external git repos (pinned in `sources.lock.yaml`) |
+| `loadout source add\|list\|remove\|import` | Track skills from external git repos (pinned in `sources.lock.yaml`); `add --alias <upstream>=<local>` and `import <source> <skill> --as <local>` import under a different local name that still tracks the real upstream skill; `list` shows an offline STATE column (`ok`/`edited`/`legacy`) |
 | `loadout check` | Check sources for updates — `git ls-remote` only, nothing fetched or applied |
-| `loadout update [source]` | Fetch updates, show changelog + artifact diff, apply to the store after confirmation |
+| `loadout update [source]` | Fetch updates and classify every skill three-way (upstream-changed / locally-edited / conflict), apply after confirmation — your local edits are never discarded unless you pass `--force-discard` (`--yes` alone never does) |
 | `loadout bundle export [--archive\|--flat]` | Export the store as a shareable directory, `.loadout.tar.gz`, or a single self-contained `.loadout.yaml` document (`--flat`) — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
 | `loadout bundle import <path>` | Validate a bundle (directory, `.tar.gz`, or flat YAML — auto-detected), show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
 | `loadout spec init\|list\|status\|check\|uncheck\|sync` | Spec-driven development: numbered specs whose checklists live in the files or in one GitHub issue per spec (`--backend github`, via your `gh` CLI). `check` is the agents' completion loop; `status --require-complete` is a CI gate |
@@ -187,7 +187,45 @@ loadout update           # shows changelog + per-skill diff, asks, applies to th
 loadout sync             # then rolls the store out to your agents (asks again)
 ```
 
-Pins live in `sources.lock.yaml` inside the store, so a shared store reproduces the exact same skill versions everywhere. Git operations shell out to your system `git` — private repos work through your existing SSH agent or credential helper, and loadout never stores credentials. Skills you edited locally (origin `local`) are never overwritten by updates; skills that disappear upstream are kept and relabeled `local`, never deleted.
+Pins live in `sources.lock.yaml` inside the store, so a shared store reproduces the exact same skill versions everywhere. Git operations shell out to your system `git` — private repos work through your existing SSH agent or credential helper, and loadout never stores credentials. Skills that disappear upstream are kept and relabeled `local`, never deleted.
+
+### Updates never eat your edits — three-way classification
+
+Every imported skill records the content hash it had at import time (`sourceHash` in the manifest). `loadout update` compares that baseline, your store copy, and the new upstream copy, and classifies each skill instead of blindly overwriting:
+
+```
+team-skills: 8131faf923 → 0c6c31bf60
+    0c6c31b feat: improve review skill
+  ~ update skill review (upstream changed)          # safe — you never touched it
+  ! skill deploy locally edited — left alone        # your edit wins, still tracked
+  !! skill plan — conflict: edited locally AND changed upstream; skipped
+     (inspect with 'loadout diff plan --upstream', apply with --force-discard)
+  . skill lint exists locally with a different origin — not touched
+```
+
+- **Locally edited** skills (you changed them, upstream didn't) are reported and left alone — forever, until you decide otherwise.
+- **Conflicts** (both sides changed) are skipped by default. `--yes` never discards your edits; only an explicit `loadout update --force-discard` takes upstream's version — and the store is snapshotted first, so `loadout restore` can bring your edits back.
+- `loadout diff <skill> --upstream` shows exactly what differs between your copy and upstream before you decide.
+- `loadout source list` shows an offline STATE column per source (`3 ok, 1 edited, 1 legacy`) — `legacy` means the skill was imported before baselines existed; its baseline is reconstructed from the pinned commit on the next update.
+- Stores from older loadout versions migrate automatically: the first `update` backfills missing baselines from the pinned commit (unreachable pins degrade to the old two-way behavior, clearly labeled).
+
+The web UI (`loadout serve` → Sources) has the same flow: plan, review the classification, apply — discarding local edits requires ticking a checkbox that names exactly which skills it would overwrite (`POST /api/sources/update/plan` + `/apply` behind a one-shot plan token, like sync).
+
+### Aliases — reuse a skill under your own name
+
+If a source ships a skill whose name you already use (or you just want your own naming), import it under an alias — the artifact remembers its real upstream name and keeps tracking it on every update and upstream diff:
+
+```bash
+loadout source add git@github.com:acme/team-skills.git --alias plan=team-plan
+# or after the fact, for a skill that was skipped at add time:
+loadout source import team-skills plan --as team-plan
+loadout update            # shows: ~ update skill plan (as team-plan)
+loadout diff team-plan --upstream
+```
+
+### Write safety
+
+Store metadata (`loadout.yaml`, `sources.lock.yaml`, install state) is written atomically — a crash mid-write can never leave a corrupt half-file. Store mutations take a machine-local lock, so a CLI `update` racing a `loadout serve` apply fails fast with "store is locked by another loadout process (pid N)" instead of interleaving writes. Every update or bundle import that overwrites store files snapshots them first (`loadout restore` lists these under the `source-update` / `bundle-import` triggers) — no snapshot, no write.
 
 Optional passive checking (off by default) in `~/.config/loadout/config.yaml`:
 
