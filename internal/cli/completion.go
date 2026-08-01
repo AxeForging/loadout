@@ -103,4 +103,8 @@ complete -c loadout -n '__fish_use_subcommand' -a agents      -d 'List supported
 complete -c loadout -n '__fish_use_subcommand' -a doctor      -d 'Verify store, agent homes, blocks and state'
 complete -c loadout -n '__fish_use_subcommand' -a version     -d 'Print version information'
 complete -c loadout -n '__fish_use_subcommand' -a completion  -d 'Generate shell completion scripts'
+complete -c loadout -n '__fish_seen_subcommand_from update' -l yes -d 'Apply without the confirmation prompt (never discards local edits)'
+complete -c loadout -n '__fish_seen_subcommand_from update' -l force-discard -d 'Also apply conflicting skills, discarding local edits'
+complete -c loadout -n '__fish_seen_subcommand_from diff' -l upstream -d 'Diff a sourced skill against its upstream'
+complete -c loadout -n '__fish_seen_subcommand_from source' -a 'add list remove import' -d 'Source subcommands'
 `

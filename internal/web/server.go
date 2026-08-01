@@ -26,6 +26,7 @@ import (
 	"github.com/AxeForging/loadout/internal/engine"
 	"github.com/AxeForging/loadout/internal/logging"
 	"github.com/AxeForging/loadout/internal/source"
+	"github.com/AxeForging/loadout/internal/store"
 	"github.com/AxeForging/loadout/internal/wizard"
 )
 
@@ -33,6 +34,9 @@ type Options struct {
 	Addr    string
 	Engine  *engine.Engine
 	Sources *source.Manager
+	// DataDir is the machine-local data dir holding the store mutation lock;
+	// empty skips locking (unit tests).
+	DataDir string
 	// Dev enables permissive CORS for the Vite dev server.
 	Dev bool
 }
@@ -44,6 +48,12 @@ type Server struct {
 	mu          sync.Mutex
 	plans       map[string]pendingPlan
 	bundlePlans map[string]pendingBundlePlan
+	sourcePlans map[string]pendingSourcePlans
+}
+
+type pendingSourcePlans struct {
+	plans   []*source.UpdatePlan
+	created time.Time
 }
 
 type pendingPlan struct {
@@ -66,7 +76,7 @@ func New(opts Options) *Server {
 	if opts.Addr == "" {
 		opts.Addr = "127.0.0.1:4600"
 	}
-	s := &Server{opts: opts, mux: http.NewServeMux(), plans: map[string]pendingPlan{}, bundlePlans: map[string]pendingBundlePlan{}}
+	s := &Server{opts: opts, mux: http.NewServeMux(), plans: map[string]pendingPlan{}, bundlePlans: map[string]pendingBundlePlan{}, sourcePlans: map[string]pendingSourcePlans{}}
 	s.routes()
 	return s
 }
@@ -82,6 +92,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/sources", s.handleSources)
 	s.mux.HandleFunc("POST /api/sources/add", s.handleSourcesAdd)
 	s.mux.HandleFunc("POST /api/sources/check", s.handleSourcesCheck)
+	s.mux.HandleFunc("POST /api/sources/update/plan", s.handleSourcesUpdatePlan)
+	s.mux.HandleFunc("POST /api/sources/update/apply", s.handleSourcesUpdateApply)
 	s.mux.HandleFunc("GET /api/wizard/schema", s.handleWizardSchema)
 	s.mux.HandleFunc("GET /api/wizard/presets", s.handleWizardPresets)
 	s.mux.HandleFunc("GET /api/profiles", s.handleProfiles)
@@ -277,6 +289,148 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// ---- two-phase source updates ----
+
+// sourcePlanJSON serializes one source's three-way update classification
+// with the same vocabulary the CLI prints.
+type sourcePlanJSON struct {
+	Source         string   `json:"source"`
+	From           string   `json:"from"`
+	To             string   `json:"to"`
+	UpToDate       bool     `json:"upToDate"`
+	Log            []string `json:"log"`
+	Changed        []string `json:"changed"`
+	Added          []string `json:"added"`
+	LocallyEdited  []string `json:"locallyEdited"`
+	Conflicts      []string `json:"conflicts"`
+	OwnedElsewhere []string `json:"ownedElsewhere"`
+	LegacyBaseline []string `json:"legacyBaseline"`
+	Removed        []string `json:"removed"`
+}
+
+func skillNames(sks []source.SkillDir) []string {
+	out := make([]string, 0, len(sks))
+	for _, sk := range sks {
+		out = append(out, sk.Label())
+	}
+	return out
+}
+
+func (s *Server) handleSourcesUpdatePlan(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Sources == nil {
+		writeErr(w, http.StatusServiceUnavailable, fmt.Errorf("no store configured"))
+		return
+	}
+	var req struct {
+		Sources []string `json:"sources"` // empty = all registered
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	names := req.Sources
+	if len(names) == 0 {
+		refs, err := s.opts.Sources.Lock()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		for _, ref := range refs {
+			names = append(names, ref.Name)
+		}
+	}
+	if len(names) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"plans": []sourcePlanJSON{}, "token": ""})
+		return
+	}
+
+	// Fetching remotes must not hang the request forever.
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	var plans []*source.UpdatePlan
+	out := make([]sourcePlanJSON, 0, len(names))
+	for _, name := range names {
+		plan, err := s.opts.Sources.PlanUpdate(ctx, name)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("plan %s: %w", name, err))
+			return
+		}
+		plans = append(plans, plan)
+		out = append(out, sourcePlanJSON{
+			Source: name, From: plan.Ref.Commit, To: plan.NewCommit,
+			UpToDate: plan.UpToDate, Log: emptyIfNil(plan.Log),
+			Changed:        skillNames(plan.Changed),
+			Added:          skillNames(plan.Added),
+			LocallyEdited:  skillNames(plan.LocallyEdited),
+			Conflicts:      skillNames(plan.Conflicts),
+			OwnedElsewhere: emptyIfNil(plan.OwnedElsewhere),
+			LegacyBaseline: emptyIfNil(plan.LegacyBaseline),
+			Removed:        emptyIfNil(plan.RemovedIDs),
+		})
+	}
+
+	token := newToken()
+	s.mu.Lock()
+	for t, p := range s.sourcePlans { // drop stale plans
+		if time.Since(p.created) > 10*time.Minute {
+			delete(s.sourcePlans, t)
+		}
+	}
+	s.sourcePlans[token] = pendingSourcePlans{plans: plans, created: time.Now()}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"plans": out, "token": token})
+}
+
+func (s *Server) handleSourcesUpdateApply(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token        string `json:"token"`
+		ForceDiscard bool   `json:"forceDiscard"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	pending, ok := takePlan(s, w, req.Token, "/api/sources/update/plan", "re-plan and review again", s.sourcePlans)
+	if !ok {
+		return
+	}
+
+	// The token round-trip is the confirmation; discarding local edits is a
+	// separate explicit opt-in the client sets after seeing the conflicts.
+	unlock, err := s.lockStore()
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	defer unlock()
+	applied := 0
+	for _, plan := range pending.plans {
+		mgr := s.opts.Sources
+		if paths := mgr.UpdateWritePaths(plan, req.ForceDiscard); len(paths) > 0 && s.opts.Engine.BackupDir != "" {
+			if _, err := engine.SnapshotStorePaths(s.opts.Engine.BackupDir, "source-update", mgr.Store.Root, paths, s.opts.Engine.KeepBackups, time.Now()); err != nil {
+				writeErr(w, http.StatusInternalServerError, fmt.Errorf("pre-write store snapshot failed — nothing was changed: %w", err))
+				return
+			}
+		}
+		if err := mgr.ApplyUpdate(plan, req.ForceDiscard); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		applied++
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"applied": applied})
+}
+
+// lockStore takes the machine-wide store mutation lock when a data dir is
+// configured; unit tests without one skip locking.
+func (s *Server) lockStore() (func(), error) {
+	if s.opts.DataDir == "" {
+		return func() {}, nil
+	}
+	return store.Lock(s.opts.DataDir)
+}
+
+func emptyIfNil(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
+}
+
 // ---- two-phase sync ----
 
 type changeJSON struct {
@@ -328,16 +482,9 @@ func (s *Server) handleSyncApply(w http.ResponseWriter, r *http.Request) {
 		Token              string `json:"token"`
 		OverwriteConflicts bool   `json:"overwriteConflicts"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/sync/plan first"))
-		return
-	}
-	s.mu.Lock()
-	pending, ok := s.plans[req.Token]
-	delete(s.plans, req.Token)
-	s.mu.Unlock()
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	pending, ok := takePlan(s, w, req.Token, "/api/sync/plan", "re-plan and review again", s.plans)
 	if !ok {
-		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — re-plan and review again"))
 		return
 	}
 	// The token round-trip IS the confirmation: the client showed the plan
@@ -357,6 +504,26 @@ func newToken() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// takePlan consumes a one-shot plan token from a pending map, writing the
+// 400/409 responses every two-phase apply shares (sync, bundle import,
+// source update). ok=false means a response has already been written.
+func takePlan[T any](s *Server, w http.ResponseWriter, token, planPath, replanHint string, pending map[string]T) (T, bool) {
+	var zero T
+	if token == "" {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call %s first", planPath))
+		return zero, false
+	}
+	s.mu.Lock()
+	p, ok := pending[token]
+	delete(pending, token)
+	s.mu.Unlock()
+	if !ok {
+		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — %s", replanHint))
+		return zero, false
+	}
+	return p, true
 }
 
 // ---- sources ----
@@ -387,6 +554,8 @@ func (s *Server) handleSourcesAdd(w http.ResponseWriter, r *http.Request) {
 		URL    string `json:"url"`
 		Ref    string `json:"ref"`
 		Subdir string `json:"subdir"`
+		// Aliases maps upstream skill names to local artifact names.
+		Aliases map[string]string `json:"aliases"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
@@ -403,7 +572,13 @@ func (s *Server) handleSourcesAdd(w http.ResponseWriter, r *http.Request) {
 	// Cloning a dead or slow remote must not hang the request forever.
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
-	result, err := s.opts.Sources.Add(ctx, name, req.URL, req.Ref, req.Subdir)
+	unlock, err := s.lockStore()
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	defer unlock()
+	result, err := s.opts.Sources.Add(ctx, name, req.URL, req.Ref, req.Subdir, req.Aliases)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -856,16 +1031,9 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 		Token     string `json:"token"`
 		Overwrite bool   `json:"overwrite"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("missing plan token — call /api/bundle/import/plan first"))
-		return
-	}
-	s.mu.Lock()
-	pending, ok := s.bundlePlans[req.Token]
-	delete(s.bundlePlans, req.Token)
-	s.mu.Unlock()
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	pending, ok := takePlan(s, w, req.Token, "/api/bundle/import/plan", "re-upload and review again", s.bundlePlans)
 	if !ok {
-		writeErr(w, http.StatusConflict, fmt.Errorf("unknown or expired plan token — re-upload and review again"))
 		return
 	}
 	defer pending.discard()
@@ -879,6 +1047,18 @@ func (s *Server) handleBundleImportApply(w http.ResponseWriter, r *http.Request)
 	groupsAdded := len(pending.plan.NewGroups)
 	if req.Overwrite {
 		groupsAdded += len(pending.plan.ConflictGroups)
+	}
+	unlock, err := s.lockStore()
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	defer unlock()
+	if paths := pending.plan.OverwritePaths(s.opts.Engine.Store, req.Overwrite); len(paths) > 0 && s.opts.Engine.BackupDir != "" {
+		if _, err := engine.SnapshotStorePaths(s.opts.Engine.BackupDir, "bundle-import", s.opts.Engine.Store.Root, paths, s.opts.Engine.KeepBackups, time.Now()); err != nil {
+			writeErr(w, http.StatusInternalServerError, fmt.Errorf("pre-write store snapshot failed — nothing was changed: %w", err))
+			return
+		}
 	}
 	applied, err := bundle.Apply(s.opts.Engine.Store, pending.plan, req.Overwrite)
 	if err != nil {

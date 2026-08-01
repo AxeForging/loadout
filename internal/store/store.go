@@ -101,7 +101,7 @@ func (s *Store) SaveManifest() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.Root, ManifestFile), raw, 0o644)
+	return WriteFileAtomic(filepath.Join(s.Root, ManifestFile), raw, 0o644)
 }
 
 // Artifact looks up a manifest entry by ID.

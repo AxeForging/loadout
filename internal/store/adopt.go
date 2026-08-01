@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/AxeForging/loadout/internal/domain"
 )
@@ -19,6 +20,12 @@ func (s *Store) Adopt(kind domain.ArtifactKind, name, src string) (domain.Artifa
 // AdoptFrom is Adopt with an explicit origin (e.g. "source:<name>" for
 // artifacts imported from an external repository).
 func (s *Store) AdoptFrom(kind domain.ArtifactKind, name, src, origin string) (domain.Artifact, error) {
+	return s.AdoptAs(kind, name, src, origin, "")
+}
+
+// AdoptAs is AdoptFrom for aliased imports: sourceName is the artifact's
+// real upstream name when it differs from the local name (empty otherwise).
+func (s *Store) AdoptAs(kind domain.ArtifactKind, name, src, origin, sourceName string) (domain.Artifact, error) {
 	if err := ValidateName(name); err != nil {
 		return domain.Artifact{}, err
 	}
@@ -56,16 +63,39 @@ func (s *Store) AdoptFrom(kind domain.ArtifactKind, name, src, origin string) (d
 		return domain.Artifact{}, fmt.Errorf("adopting %s artifacts is not supported", kind)
 	}
 
+	if sourceName == name {
+		sourceName = ""
+	}
 	a := domain.Artifact{
-		ID:     name,
-		Kind:   kind,
-		Path:   filepath.ToSlash(relPath),
-		Origin: origin,
+		ID:         name,
+		Kind:       kind,
+		Path:       filepath.ToSlash(relPath),
+		Origin:     origin,
+		SourceName: sourceName,
+	}
+	if strings.HasPrefix(origin, "source:") {
+		content, err := s.Content(a)
+		if err != nil {
+			return domain.Artifact{}, err
+		}
+		a.SourceHash = Hash(content)
 	}
 	if err := s.AddArtifact(a); err != nil {
 		return domain.Artifact{}, err
 	}
 	return a, nil
+}
+
+// SetSourceHash updates an artifact's import baseline and persists the
+// manifest. Used by source updates after refreshing an artifact's content.
+func (s *Store) SetSourceHash(id, hash string) error {
+	for i := range s.Manifest.Artifacts {
+		if s.Manifest.Artifacts[i].ID == id {
+			s.Manifest.Artifacts[i].SourceHash = hash
+			return s.SaveManifest()
+		}
+	}
+	return fmt.Errorf("artifact %q not found", id)
 }
 
 // CopyTree copies a directory recursively, preserving file modes. Used by

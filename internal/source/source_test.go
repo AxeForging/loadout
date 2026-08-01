@@ -77,7 +77,7 @@ func TestAdd_ImportsSkillsAndPinsCommit(t *testing.T) {
 	commit := u.commit("initial")
 
 	m := newManager(t)
-	res, err := m.Add(context.Background(), "team-skills", u.dir, "main", "")
+	res, err := m.Add(context.Background(), "team-skills", u.dir, "main", "", nil)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestAdd_SkipsArtifactsThatAlreadyExist(t *testing.T) {
 	if _, err := m.Store.New(domain.KindSkill, "review"); err != nil {
 		t.Fatal(err)
 	}
-	res, err := m.Add(context.Background(), "src", u.dir, "main", "")
+	res, err := m.Add(context.Background(), "src", u.dir, "main", "", nil)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestCheck_ReportsUpdateOnlyWhenRemoteMoved(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,7 +160,7 @@ func TestUpdate_AppliesChangedAndAddedSkillsAndMovesPin(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,7 +185,7 @@ func TestUpdate_AppliesChangedAndAddedSkillsAndMovesPin(t *testing.T) {
 		t.Error("changelog should span the old pin")
 	}
 
-	if err := m.ApplyUpdate(plan); err != nil {
+	if err := m.ApplyUpdate(plan, false); err != nil {
 		t.Fatalf("ApplyUpdate() error = %v", err)
 	}
 	raw, _ := os.ReadFile(filepath.Join(m.Store.Root, "skills", "review", "SKILL.md"))
@@ -208,7 +208,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,11 +217,10 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	if err := os.WriteFile(storeFile, []byte("my heavily customized version\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// But it is still origin source:src — upstream changes SHOULD update it.
-	// A user-owned (origin local) artifact must never be overwritten though:
-	if _, err := m.Store.New(domain.KindSkill, "mine"); err != nil {
-		t.Fatal(err)
-	}
+	// It stays origin source:src but is now locally edited — updates must
+	// leave it alone. A user-owned (origin local) artifact must never be
+	// overwritten either:
+	newLocalSkill(t, m, "mine")
 
 	if err := os.RemoveAll(filepath.Join(u.dir, "goner")); err != nil {
 		t.Fatal(err)
@@ -229,10 +228,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	u.writeSkill("mine", "upstream impostor") // same name as the user's local skill
 	u.commit("v2")
 
-	plan, err := m.PlanUpdate(context.Background(), "src")
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan := mustPlanUpdate(t, m, "src")
 	for _, sk := range plan.Added {
 		if sk.Name == "mine" {
 			t.Error("upstream skill colliding with a local artifact must not be planned as added")
@@ -247,7 +243,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 		t.Errorf("RemovedIDs = %v", plan.RemovedIDs)
 	}
 
-	if err := m.ApplyUpdate(plan); err != nil {
+	if err := m.ApplyUpdate(plan, false); err != nil {
 		t.Fatal(err)
 	}
 	art, _ := m.Store.Artifact("goner")
@@ -266,7 +262,7 @@ func TestRemove_PurgeDeletesImportedArtifacts(t *testing.T) {
 	u.commit("initial")
 
 	m := newManager(t)
-	if _, err := m.Add(context.Background(), "src", u.dir, "main", ""); err != nil {
+	if _, err := m.Add(context.Background(), "src", u.dir, "main", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	removed, err := m.Remove("src", true)

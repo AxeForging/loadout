@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/AxeForging/loadout/internal/store"
 	"github.com/goccy/go-yaml"
 )
 
@@ -42,7 +43,7 @@ func (s state) save(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, raw, 0o644)
+	return store.WriteFileAtomic(path, raw, 0o644)
 }
 
 func (s state) get(artifact, agent, relPath string) string {
