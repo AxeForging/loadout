@@ -13,8 +13,14 @@ func diffCmd() *cli.Command {
 		Name:      "diff",
 		Usage:     "Show what sync would change, as unified diffs",
 		ArgsUsage: "[artifact...]",
-		Flags:     []cli.Flag{agentFlag(), projectFlag()},
+		Flags: []cli.Flag{agentFlag(), projectFlag(), &cli.BoolFlag{
+			Name:  "upstream",
+			Usage: "Diff a source-imported skill's store copy against the source's remote head instead",
+		}},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			if cmd.Bool("upstream") {
+				return upstreamDiff(ctx, cmd)
+			}
 			eng, err := newEngine(cmd)
 			if err != nil {
 				return err
@@ -40,4 +46,28 @@ func diffCmd() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// upstreamDiff handles `loadout diff <skill> --upstream`: the store copy vs
+// the skill at the source's remote head — the inspection step before
+// deciding on an update or a --force-discard.
+func upstreamDiff(ctx context.Context, cmd *cli.Command) error {
+	args := cmd.Args().Slice()
+	if len(args) != 1 {
+		return fmt.Errorf("usage: loadout diff <skill-id> --upstream")
+	}
+	m, err := newSourceManager(cmd)
+	if err != nil {
+		return err
+	}
+	text, err := m.UpstreamDiff(ctx, args[0])
+	if err != nil {
+		return err
+	}
+	if text == "" {
+		fmt.Printf("%s matches upstream — no differences.\n", args[0])
+		return nil
+	}
+	fmt.Print(text)
+	return nil
 }

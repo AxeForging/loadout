@@ -171,6 +171,43 @@ func (m *Manager) Remove(name string, purge bool) ([]string, error) {
 	return removed, nil
 }
 
+// SkillState is the offline half of the three-way classification: how a
+// source-owned artifact's store content relates to its recorded import
+// baseline. Computed without any network access.
+type SkillState string
+
+const (
+	SkillOK     SkillState = "ok"     // store content matches the import baseline
+	SkillEdited SkillState = "edited" // user changed it in the store since import
+	SkillLegacy SkillState = "legacy" // no baseline recorded (pre-008 import)
+)
+
+// SkillStates maps each artifact owned by the named source to its offline
+// state, for `loadout source list`.
+func (m *Manager) SkillStates(name string) (map[string]SkillState, error) {
+	origin := domain.OriginSource(name)
+	out := map[string]SkillState{}
+	for _, a := range m.Store.Manifest.Artifacts {
+		if a.Origin != origin {
+			continue
+		}
+		if a.SourceHash == "" {
+			out[a.ID] = SkillLegacy
+			continue
+		}
+		c, err := m.Store.Content(a)
+		if err != nil {
+			return nil, err
+		}
+		if store.Hash(c) == a.SourceHash {
+			out[a.ID] = SkillOK
+		} else {
+			out[a.ID] = SkillEdited
+		}
+	}
+	return out, nil
+}
+
 // SkillDir is a discovered skill inside a source clone.
 type SkillDir struct {
 	Name string

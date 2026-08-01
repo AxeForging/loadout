@@ -25,6 +25,26 @@ func newSourceManager(cmd *cli.Command) (*source.Manager, error) {
 	return &source.Manager{Store: s, CacheDir: filepath.Join(data, "sources")}, nil
 }
 
+// summarizeStates renders a source's offline skill states for the list
+// column: "3 ok" / "2 ok, 1 edited" / "1 edited, 2 legacy" / "-" when the
+// source owns nothing.
+func summarizeStates(states map[string]source.SkillState) string {
+	counts := map[source.SkillState]int{}
+	for _, st := range states {
+		counts[st]++
+	}
+	var parts []string
+	for _, st := range []source.SkillState{source.SkillOK, source.SkillEdited, source.SkillLegacy} {
+		if counts[st] > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", counts[st], st))
+		}
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, ", ")
+}
+
 func sourceCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "source",
@@ -88,13 +108,17 @@ func sourceCmd() *cli.Command {
 						return nil
 					}
 					w := tabwriter.NewWriter(os.Stdout, 2, 4, 2, ' ', 0)
-					fmt.Fprintln(w, "NAME\tURL\tREF\tPINNED\tSUBDIR")
+					fmt.Fprintln(w, "NAME\tURL\tREF\tPINNED\tSUBDIR\tSTATE")
 					for _, r := range refs {
 						ref := r.Ref
 						if ref == "" {
 							ref = "(default)"
 						}
-						fmt.Fprintf(w, "%s\t%s\t%s\t%.10s\t%s\n", r.Name, r.URL, ref, r.Commit, r.Subdir)
+						states, err := m.SkillStates(r.Name)
+						if err != nil {
+							return err
+						}
+						fmt.Fprintf(w, "%s\t%s\t%s\t%.10s\t%s\t%s\n", r.Name, r.URL, ref, r.Commit, r.Subdir, summarizeStates(states))
 					}
 					return w.Flush()
 				},

@@ -298,9 +298,9 @@ func (m *Manager) setSourceHashInMemory(id, hash string) {
 	}
 }
 
-// hashDir hashes a directory's file set the same way the store hashes
+// dirContent reads a directory's file set keyed the same way the store keys
 // artifact content, so clone-side and store-side hashes are comparable.
-func hashDir(dir string) (string, error) {
+func dirContent(dir string) (domain.Content, error) {
 	c := domain.Content{Files: map[string][]byte{}}
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -317,6 +317,12 @@ func hashDir(dir string) (string, error) {
 		c.Files[filepath.ToSlash(rel)] = raw
 		return nil
 	})
+	return c, err
+}
+
+// hashDir hashes a directory via dirContent.
+func hashDir(dir string) (string, error) {
+	c, err := dirContent(dir)
 	if err != nil {
 		return "", err
 	}
