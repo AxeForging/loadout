@@ -185,7 +185,7 @@ func TestUpdate_AppliesChangedAndAddedSkillsAndMovesPin(t *testing.T) {
 		t.Error("changelog should span the old pin")
 	}
 
-	if err := m.ApplyUpdate(plan); err != nil {
+	if err := m.ApplyUpdate(plan, false); err != nil {
 		t.Fatalf("ApplyUpdate() error = %v", err)
 	}
 	raw, _ := os.ReadFile(filepath.Join(m.Store.Root, "skills", "review", "SKILL.md"))
@@ -217,8 +217,9 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 	if err := os.WriteFile(storeFile, []byte("my heavily customized version\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// But it is still origin source:src — upstream changes SHOULD update it.
-	// A user-owned (origin local) artifact must never be overwritten though:
+	// It stays origin source:src but is now locally edited — updates must
+	// leave it alone. A user-owned (origin local) artifact must never be
+	// overwritten either:
 	if _, err := m.Store.New(domain.KindSkill, "mine"); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestUpdate_NeverTouchesUserOwnedArtifactsAndRelabelsRemoved(t *testing.T) {
 		t.Errorf("RemovedIDs = %v", plan.RemovedIDs)
 	}
 
-	if err := m.ApplyUpdate(plan); err != nil {
+	if err := m.ApplyUpdate(plan, false); err != nil {
 		t.Fatal(err)
 	}
 	art, _ := m.Store.Artifact("goner")

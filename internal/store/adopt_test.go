@@ -65,3 +65,77 @@ func TestAdopt_RejectsShapeMismatch(t *testing.T) {
 		t.Error("adopting a directory as a command should fail")
 	}
 }
+
+func TestAdoptFrom_SourceOriginRecordsBaselineHash(t *testing.T) {
+	s := testStore(t)
+	src := filepath.Join(t.TempDir(), "skill")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: x\n---\nbody\n"), 0o644)
+
+	a, err := s.AdoptFrom(domain.KindSkill, "sourced", src, domain.OriginSource("team"))
+	if err != nil {
+		t.Fatalf("AdoptFrom() error = %v", err)
+	}
+	if a.SourceHash == "" {
+		t.Fatal("source-origin adopt must record a baseline hash")
+	}
+	content, err := s.Content(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.SourceHash != Hash(content) {
+		t.Errorf("baseline hash %q does not match adopted content hash %q", a.SourceHash, Hash(content))
+	}
+	// The persisted manifest carries the hash too.
+	saved, _ := s.Artifact("sourced")
+	if saved.SourceHash != a.SourceHash {
+		t.Error("baseline hash not persisted in the manifest")
+	}
+}
+
+func TestAdopt_LocalOriginRecordsNoBaselineHash(t *testing.T) {
+	s := testStore(t)
+	src := filepath.Join(t.TempDir(), "skill")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("---\nname: y\n---\n"), 0o644)
+
+	a, err := s.Adopt(domain.KindSkill, "local-skill", src)
+	if err != nil {
+		t.Fatalf("Adopt() error = %v", err)
+	}
+	if a.SourceHash != "" {
+		t.Errorf("local adopt must not record a baseline hash, got %q", a.SourceHash)
+	}
+}
+
+func TestSetSourceHash_PersistsAndErrorsOnUnknown(t *testing.T) {
+	s := testStore(t)
+	src := filepath.Join(t.TempDir(), "skill")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("v1"), 0o644)
+	if _, err := s.AdoptFrom(domain.KindSkill, "sk", src, domain.OriginSource("team")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.SetSourceHash("sk", "newhash"); err != nil {
+		t.Fatalf("SetSourceHash() error = %v", err)
+	}
+	reopened, err := Open(s.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := reopened.Artifact("sk")
+	if a.SourceHash != "newhash" {
+		t.Errorf("reopened store hash = %q, want %q", a.SourceHash, "newhash")
+	}
+
+	if err := s.SetSourceHash("missing", "h"); err == nil {
+		t.Error("SetSourceHash on unknown artifact must error")
+	}
+}

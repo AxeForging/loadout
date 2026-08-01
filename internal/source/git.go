@@ -28,6 +28,23 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 	return strings.TrimSpace(out.String()), nil
 }
 
+// gitRaw is git() without stdout trimming — for commands whose output is
+// file content, where a stripped trailing newline would corrupt hashes.
+func gitRaw(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errBuf.String()))
+	}
+	return out.Bytes(), nil
+}
+
 // cloneFresh replaces dir with a shallow clone of url at ref and returns the
 // resolved HEAD commit.
 func cloneFresh(ctx context.Context, url, ref, dir string) (string, error) {

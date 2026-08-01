@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/AxeForging/loadout/internal/domain"
 	"github.com/AxeForging/loadout/internal/store"
@@ -39,27 +40,58 @@ func (m *Manager) Check(ctx context.Context) ([]CheckResult, error) {
 
 // UpdatePlan describes what applying a source update would change in the
 // STORE (agent homes are only ever touched by 'loadout sync' afterwards).
+// Each source-owned skill is classified three-way — baseline (content as
+// last imported), store (content now) and upstream — so a user's local edits
+// are never mistaken for upstream changes.
 type UpdatePlan struct {
 	Ref       domain.SourceRef
 	NewCommit string
 	Log       []string
 	Added     []SkillDir
-	Changed   []SkillDir
+	// Changed skills are safe to write: the user never touched them and
+	// upstream moved (or no baseline is known — see LegacyBaseline).
+	Changed []SkillDir
+	// LocallyEdited skills differ from their import baseline while upstream
+	// did not move them — they are reported and never written.
+	LocallyEdited []SkillDir
+	// Conflicts moved both locally and upstream — written only when the
+	// caller explicitly opts into discarding the local edits.
+	Conflicts []SkillDir
+	// OwnedElsewhere are upstream skill names that exist locally with a
+	// different origin (the user's own or another source's) — never touched,
+	// listed so the collision is visible.
+	OwnedElsewhere []string
+	// LegacyBaseline names skills with no recorded import baseline whose
+	// pinned content could not be reconstructed (pre-008 store with an
+	// unreachable pin): for these, "changed" falls back to the legacy
+	// two-way comparison and local-edit detection was impossible.
+	LegacyBaseline []string
 	// RemovedIDs are store artifacts from this source that vanished
 	// upstream; they are kept and relabeled origin "local", never deleted.
 	RemovedIDs []string
-	UpToDate   bool
+	// UpToDate means the pin already points at the remote head. Unresolved
+	// conflicts and local edits are still classified and reported so a
+	// previously skipped discard can be forced without a new upstream commit.
+	UpToDate bool
+
+	// rebaseline holds silent manifest-only baseline stamps for skills whose
+	// store content already matches upstream but whose recorded baseline is
+	// missing or stale (e.g. first update of a pre-008 store).
+	rebaseline map[string]string
 
 	cloneDir string
 }
 
-// Changes reports whether applying the plan would modify the store.
+// Changes reports how many artifacts applying the plan would write without
+// force-discard. Skipped conflicts are intentionally not counted.
 func (p *UpdatePlan) Changes() int {
 	return len(p.Added) + len(p.Changed) + len(p.RemovedIDs)
 }
 
-// PlanUpdate fetches the source and computes the artifact-level diff against
-// the store. It performs no store writes.
+// PlanUpdate fetches the source and computes the artifact-level three-way
+// diff against the store. It performs no store writes. Even when the pin is
+// up-to-date the classification runs, so conflicts skipped by an earlier
+// update remain visible and forceable.
 func (m *Manager) PlanUpdate(ctx context.Context, name string) (*UpdatePlan, error) {
 	ref, _, err := m.find(name)
 	if err != nil {
@@ -70,12 +102,12 @@ func (m *Manager) PlanUpdate(ctx context.Context, name string) (*UpdatePlan, err
 	if err != nil {
 		return nil, err
 	}
-	plan := &UpdatePlan{Ref: ref, NewCommit: commit, cloneDir: dir}
+	plan := &UpdatePlan{Ref: ref, NewCommit: commit, cloneDir: dir, rebaseline: map[string]string{}}
 	if commit == ref.Commit {
 		plan.UpToDate = true
-		return plan, nil
+	} else {
+		plan.Log = changelog(ctx, dir, ref.Commit, commit)
 	}
-	plan.Log = changelog(ctx, dir, ref.Commit, commit)
 
 	skills, err := DiscoverSkills(dir, ref.Subdir)
 	if err != nil {
@@ -91,50 +123,105 @@ func (m *Manager) PlanUpdate(ctx context.Context, name string) (*UpdatePlan, err
 		art, exists := m.Store.Artifact(sk.Name)
 		switch {
 		case !exists:
-			plan.Added = append(plan.Added, sk)
-		case art.Origin != origin:
-			// Owned by the user or another source — never overwrite.
-		default:
-			same, err := m.sameContent(art, sk.Path)
-			if err != nil {
-				return nil, err
+			if !plan.UpToDate {
+				plan.Added = append(plan.Added, sk)
 			}
-			if !same {
-				plan.Changed = append(plan.Changed, sk)
+		case art.Origin != origin:
+			plan.OwnedElsewhere = append(plan.OwnedElsewhere, sk.Name)
+		default:
+			if err := m.classifySkill(ctx, plan, art, sk); err != nil {
+				return nil, err
 			}
 		}
 	}
-	for _, art := range m.Store.Manifest.Artifacts {
-		if art.Origin == origin {
-			if _, still := upstream[art.ID]; !still {
-				plan.RemovedIDs = append(plan.RemovedIDs, art.ID)
+	if !plan.UpToDate {
+		for _, art := range m.Store.Manifest.Artifacts {
+			if art.Origin == origin {
+				if _, still := upstream[art.ID]; !still {
+					plan.RemovedIDs = append(plan.RemovedIDs, art.ID)
+				}
 			}
 		}
 	}
 	return plan, nil
 }
 
+// classifySkill routes one source-owned skill into the plan's buckets using
+// the three-way hash comparison, reconstructing a missing baseline from the
+// pinned commit when possible.
+func (m *Manager) classifySkill(ctx context.Context, plan *UpdatePlan, art domain.Artifact, sk SkillDir) error {
+	current, err := m.Store.Content(art)
+	if err != nil {
+		return err
+	}
+	storeHash := store.Hash(current)
+	upstreamHash, err := hashDir(sk.Path)
+	if err != nil {
+		return err
+	}
+
+	baseline := art.SourceHash
+	backfilled := false
+	if baseline == "" && storeHash != upstreamHash {
+		if h, ok := m.hashAtCommit(ctx, plan.cloneDir, plan.Ref.Commit, sk); ok {
+			baseline = h
+			backfilled = true
+		}
+	}
+
+	switch classifyUpdate(baseline, storeHash, upstreamHash) {
+	case stateIdentical:
+		if art.SourceHash != storeHash {
+			plan.rebaseline[art.ID] = storeHash
+		}
+	case stateUpstreamChanged:
+		plan.Changed = append(plan.Changed, sk)
+	case stateLocallyEdited:
+		plan.LocallyEdited = append(plan.LocallyEdited, sk)
+		if backfilled {
+			// The reconstructed baseline is worth persisting so the next
+			// plan detects this without git archaeology.
+			plan.rebaseline[art.ID] = baseline
+		}
+	case stateConflict:
+		plan.Conflicts = append(plan.Conflicts, sk)
+	case stateLegacy:
+		plan.LegacyBaseline = append(plan.LegacyBaseline, sk.Name)
+		plan.Changed = append(plan.Changed, sk)
+	}
+	return nil
+}
+
 // ApplyUpdate writes the planned changes into the store and moves the pin.
 // The caller is responsible for having confirmed the plan with the user.
-func (m *Manager) ApplyUpdate(p *UpdatePlan) error {
-	if p.UpToDate {
-		return nil
-	}
+// Conflicts are written only when forceDiscard is true; locally edited
+// skills are never written.
+func (m *Manager) ApplyUpdate(p *UpdatePlan, forceDiscard bool) error {
 	origin := domain.OriginSource(p.Ref.Name)
-	for _, sk := range p.Changed {
-		dst := ""
-		if art, ok := m.Store.Artifact(sk.Name); ok {
-			dst = filepath.Join(m.Store.Root, art.Path)
-		}
-		if dst == "" {
+	dirty := false
+
+	write := append([]SkillDir{}, p.Changed...)
+	if forceDiscard {
+		write = append(write, p.Conflicts...)
+	}
+	for _, sk := range write {
+		art, ok := m.Store.Artifact(sk.Name)
+		if !ok {
 			continue
 		}
+		dst := filepath.Join(m.Store.Root, art.Path)
 		if err := os.RemoveAll(dst); err != nil {
 			return err
 		}
 		if err := store.CopyTree(sk.Path, dst); err != nil {
 			return err
 		}
+		h, err := hashDir(sk.Path)
+		if err != nil {
+			return err
+		}
+		m.setSourceHashInMemory(sk.Name, h)
+		dirty = true
 	}
 	for _, sk := range p.Added {
 		if _, err := m.Store.AdoptFrom(domain.KindSkill, sk.Name, sk.Path, origin); err != nil {
@@ -145,15 +232,24 @@ func (m *Manager) ApplyUpdate(p *UpdatePlan) error {
 		for i, art := range m.Store.Manifest.Artifacts {
 			if art.ID == id {
 				m.Store.Manifest.Artifacts[i].Origin = "local"
+				m.Store.Manifest.Artifacts[i].SourceHash = ""
+				dirty = true
 			}
 		}
 	}
-	if len(p.RemovedIDs) > 0 {
+	for id, h := range p.rebaseline {
+		m.setSourceHashInMemory(id, h)
+		dirty = true
+	}
+	if dirty {
 		if err := m.Store.SaveManifest(); err != nil {
 			return err
 		}
 	}
 
+	if p.NewCommit == p.Ref.Commit {
+		return nil
+	}
 	refs, err := m.Lock()
 	if err != nil {
 		return err
@@ -166,15 +262,22 @@ func (m *Manager) ApplyUpdate(p *UpdatePlan) error {
 	return m.saveLock(refs)
 }
 
-// sameContent compares a store artifact's content hash with a directory in
-// the source clone.
-func (m *Manager) sameContent(art domain.Artifact, dir string) (bool, error) {
-	current, err := m.Store.Content(art)
-	if err != nil {
-		return false, err
+// setSourceHashInMemory mutates the manifest entry without saving — callers
+// batch mutations and save once.
+func (m *Manager) setSourceHashInMemory(id, hash string) {
+	for i := range m.Store.Manifest.Artifacts {
+		if m.Store.Manifest.Artifacts[i].ID == id {
+			m.Store.Manifest.Artifacts[i].SourceHash = hash
+			return
+		}
 	}
-	incoming := domain.Content{Files: map[string][]byte{}}
-	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+}
+
+// hashDir hashes a directory's file set the same way the store hashes
+// artifact content, so clone-side and store-side hashes are comparable.
+func hashDir(dir string) (string, error) {
+	c := domain.Content{Files: map[string][]byte{}}
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -186,11 +289,36 @@ func (m *Manager) sameContent(art domain.Artifact, dir string) (bool, error) {
 		if err != nil {
 			return err
 		}
-		incoming.Files[filepath.ToSlash(rel)] = raw
+		c.Files[filepath.ToSlash(rel)] = raw
 		return nil
 	})
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	return store.Hash(current) == store.Hash(incoming), nil
+	return store.Hash(c), nil
+}
+
+// hashAtCommit reconstructs a skill's content hash at a commit from the full
+// clone (used to backfill baselines for stores predating sourceHash). A
+// missing path or unreachable commit reports ok=false, never an error — the
+// caller degrades to legacy behavior.
+func (m *Manager) hashAtCommit(ctx context.Context, cloneDir, commit string, sk SkillDir) (string, bool) {
+	rel, err := filepath.Rel(cloneDir, sk.Path)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	list, err := git(ctx, cloneDir, "ls-tree", "-r", "--name-only", commit, "--", rel)
+	if err != nil || list == "" {
+		return "", false
+	}
+	c := domain.Content{Files: map[string][]byte{}}
+	for _, p := range strings.Split(list, "\n") {
+		raw, err := gitRaw(ctx, cloneDir, "show", commit+":"+p)
+		if err != nil {
+			return "", false
+		}
+		c.Files[strings.TrimPrefix(p, rel+"/")] = raw
+	}
+	return store.Hash(c), true
 }

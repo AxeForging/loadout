@@ -46,6 +46,11 @@ type Artifact struct {
 	Targets []string     `yaml:"targets,omitempty"     json:"targets,omitempty"`
 	Origin  string       `yaml:"origin,omitempty"      json:"origin,omitempty"`
 	Tags    []string     `yaml:"tags,omitempty"        json:"tags,omitempty"`
+	// SourceHash is the content hash of this artifact as last imported from
+	// its source (origin "source:*"), the baseline that lets updates tell
+	// "upstream changed it" from "the user edited it locally". Empty for
+	// local artifacts and for stores created before the field existed.
+	SourceHash string `yaml:"sourceHash,omitempty"  json:"sourceHash,omitempty"`
 }
 
 // Defaults holds manifest-wide fallbacks.
