@@ -225,8 +225,12 @@ func bundleCmd() *cli.Command {
 						fmt.Println("Aborted — nothing imported.")
 						return nil
 					}
-					applied, err := bundle.Apply(s, plan, overwrite)
-					if err != nil {
+					var applied []string
+					if err := withStoreLock(func() error {
+						var applyErr error
+						applied, applyErr = bundle.Apply(s, plan, overwrite)
+						return applyErr
+					}); err != nil {
 						return err
 					}
 					fmt.Printf("Imported: %s\n", strings.Join(applied, ", "))

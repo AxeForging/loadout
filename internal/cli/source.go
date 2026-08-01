@@ -52,8 +52,12 @@ func sourceCmd() *cli.Command {
 					if err != nil {
 						return err
 					}
-					res, err := m.Add(ctx, name, url, cmd.String("ref"), cmd.String("subdir"))
-					if err != nil {
+					var res source.AddResult
+					if err := withStoreLock(func() error {
+						var addErr error
+						res, addErr = m.Add(ctx, name, url, cmd.String("ref"), cmd.String("subdir"))
+						return addErr
+					}); err != nil {
 						return err
 					}
 					fmt.Printf("Added source %q pinned at %.10s\n", name, res.Ref.Commit)
@@ -111,8 +115,12 @@ func sourceCmd() *cli.Command {
 					if err != nil {
 						return err
 					}
-					removed, err := m.Remove(name, cmd.Bool("purge"))
-					if err != nil {
+					var removed []string
+					if err := withStoreLock(func() error {
+						var rmErr error
+						removed, rmErr = m.Remove(name, cmd.Bool("purge"))
+						return rmErr
+					}); err != nil {
 						return err
 					}
 					fmt.Printf("Removed source %q\n", name)

@@ -32,6 +32,22 @@ func newRegistry() *adapter.Registry {
 	return r
 }
 
+// withStoreLock runs fn holding the machine-wide store mutation lock, so
+// concurrent loadout processes (CLI, TUI, serve) cannot interleave store
+// writes. Reads never take it.
+func withStoreLock(fn func() error) error {
+	data, err := config.DataDir()
+	if err != nil {
+		return err
+	}
+	unlock, err := store.Lock(data)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return fn()
+}
+
 // resolveStorePath applies precedence: --store flag > config file > default.
 func resolveStorePath(cmd *cli.Command) (string, error) {
 	cfg, err := config.Load()

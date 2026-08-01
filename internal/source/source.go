@@ -54,7 +54,7 @@ func (m *Manager) saveLock(refs []domain.SourceRef) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(m.Store.Root, LockFile), raw, 0o644)
+	return store.WriteFileAtomic(filepath.Join(m.Store.Root, LockFile), raw, 0o644)
 }
 
 func (m *Manager) find(name string) (domain.SourceRef, []domain.SourceRef, error) {

@@ -87,7 +87,7 @@ func updateCmd() *cli.Command {
 					fmt.Println("  skipped.")
 					continue
 				}
-				if err := m.ApplyUpdate(plan, force); err != nil {
+				if err := withStoreLock(func() error { return m.ApplyUpdate(plan, force) }); err != nil {
 					return err
 				}
 				applied++
