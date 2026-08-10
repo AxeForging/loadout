@@ -202,3 +202,76 @@ func keys(c domain.Content) []string {
 	}
 	return out
 }
+
+func TestRemoveArtifact_DropsManifestEntryAndContent(t *testing.T) {
+	s, err := Init(t.TempDir(), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.New(domain.KindSkill, "gone"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.New(domain.KindCommand, "kept"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RemoveArtifact("gone"); err != nil {
+		t.Fatalf("RemoveArtifact() error = %v", err)
+	}
+	if _, found := s.Artifact("gone"); found {
+		t.Error("manifest entry should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(s.Root, "skills", "gone")); !os.IsNotExist(err) {
+		t.Error("content directory should be deleted")
+	}
+
+	// Persisted, not just in memory — and the other artifact survives intact.
+	reopened, err := Open(s.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := reopened.Artifact("gone"); found {
+		t.Error("removal not persisted to loadout.yaml")
+	}
+	if _, found := reopened.Artifact("kept"); !found {
+		t.Error("unrelated artifact lost")
+	}
+}
+
+func TestRemoveArtifact_UnknownIDErrors(t *testing.T) {
+	s, err := Init(t.TempDir(), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RemoveArtifact("nope"); err == nil {
+		t.Fatal("want an error for an unknown artifact")
+	}
+}
+
+func TestRemoveArtifact_EscapingContentPathRefusesFileDeletion(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Init(filepath.Join(dir, "store"), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(dir, "precious.txt")
+	if err := os.WriteFile(outside, []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.Manifest.Artifacts = append(s.Manifest.Artifacts, domain.Artifact{
+		ID: "evil", Kind: domain.KindCommand, Path: "../precious.txt",
+	})
+	if err := s.SaveManifest(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RemoveArtifact("evil"); err == nil {
+		t.Fatal("want an error for a content path escaping the store")
+	}
+	if _, statErr := os.Stat(outside); statErr != nil {
+		t.Error("file outside the store must never be deleted")
+	}
+	if _, found := s.Artifact("evil"); found {
+		t.Error("manifest entry should still be removed")
+	}
+}

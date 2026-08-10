@@ -24,7 +24,7 @@ func TestPlanRemoval_MergeReplaceFile_QueuesDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rp, err := env.eng.PlanRemoval(context.Background(), installed)
+	rp, err := env.eng.PlanRemoval(context.Background(), installed, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -56,7 +56,7 @@ func TestPlanRemoval_SkillArtifact_CollapsesToSingleDirectoryDelete(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	rp, err := env.eng.PlanRemoval(context.Background(), installed)
+	rp, err := env.eng.PlanRemoval(context.Background(), installed, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestPlanRemoval_MergeBlock_StripsBlockKeepsRestOfFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rp, err := env.eng.PlanRemoval(context.Background(), installed)
+	rp, err := env.eng.PlanRemoval(context.Background(), installed, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestPlanRemoval_MergeBlock_AlreadyAbsent_NoopButClearsState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rp, err := env.eng.PlanRemoval(context.Background(), []string{"style"})
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"style"}, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestPlanRemoval_MergeBlock_BrokenMarkers_WarnsDoesNotTouchFile(t *testing.T
 		t.Fatal(err)
 	}
 
-	rp, err := env.eng.PlanRemoval(context.Background(), []string{"style"})
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"style"}, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -157,46 +157,82 @@ func TestPlanRemoval_MergeBlock_BrokenMarkers_WarnsDoesNotTouchFile(t *testing.T
 	}
 }
 
-func TestPlanRemoval_MergeJSON_WarnsLeavesFileClearsState(t *testing.T) {
+func TestPlanRemoval_Hook_RemovesSettingsEntryKeepsUserBytes(t *testing.T) {
 	env := newTestEnv(t)
+	userSettings := "{\n\t\"model\": \"opus\",\n\t\"env\": {\"FOO\": \"bar\"}\n}\n"
+	settingsPath := filepath.Join(env.home, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(userSettings), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := env.store.New(domain.KindHook, "lint"); err != nil {
 		t.Fatal(err)
 	}
 	env.applyAll(t)
 
-	settingsPath := filepath.Join(env.home, "settings.json")
-	before, err := os.ReadFile(settingsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rp, err := env.eng.PlanRemoval(context.Background(), []string{"lint"})
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"lint"}, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
 
-	// One warning for the JSON fragment; the hook script (MergeReplace) is a
-	// real delete Item.
-	var jsonWarned bool
-	for _, w := range rp.Warnings {
-		if w.RelPath == "settings.json" {
-			jsonWarned = true
+	// The hook script (MergeReplace) is a delete Item; settings.json must be an
+	// OpUpdate item whose Desired has the merged hook entry surgically removed
+	// (ROADMAP:104 — this used to leak the entry forever).
+	var settings *Item
+	for i := range rp.Items {
+		if rp.Items[i].RelPath == "settings.json" {
+			settings = &rp.Items[i]
 		}
 	}
-	if !jsonWarned {
-		t.Errorf("Warnings = %v, want a warning for settings.json", rp.Warnings)
+	if settings == nil {
+		t.Fatalf("Items = %+v, want an OpUpdate item for settings.json", rp.Items)
 	}
-	for _, it := range rp.Items {
-		if it.RelPath == "settings.json" {
-			t.Errorf("settings.json should never be a removal Item, got %+v", it)
-		}
+	if settings.Op != OpUpdate {
+		t.Errorf("settings.json Op = %s, want %s", settings.Op, OpUpdate)
+	}
+	desired := string(settings.Desired)
+	if strings.Contains(desired, "loadout-lint") || strings.Contains(desired, "hooks") {
+		t.Errorf("hook entry not removed from Desired:\n%s", desired)
+	}
+	if !strings.Contains(desired, "\t\"model\": \"opus\"") || !strings.Contains(desired, "{\"FOO\": \"bar\"}") {
+		t.Errorf("user settings bytes not preserved:\n%s", desired)
 	}
 	if len(rp.ClearState) != 1 || rp.ClearState[0].Artifact != "lint" {
 		t.Errorf("ClearState = %v, want [lint]", rp.ClearState)
 	}
-	after, err := os.ReadFile(settingsPath)
-	if err != nil || string(after) != string(before) {
-		t.Error("settings.json must be left byte-identical")
+}
+
+func TestPlanRemoval_MCP_RemovesUserScopeServerEntryKeepsOthers(t *testing.T) {
+	fakeUserHome := t.TempDir()
+	t.Setenv("HOME", fakeUserHome)
+	env := newTestEnv(t)
+
+	userConfig := "{\n\t\"numStartups\": 42,\n\t\"mcpServers\": {\n\t\t\"user-own\": {\"command\": \"deno\"}\n\t}\n}\n"
+	configPath := filepath.Join(fakeUserHome, ".claude.json")
+	if err := os.WriteFile(configPath, []byte(userConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.store.New(domain.KindMCP, "gh"); err != nil {
+		t.Fatal(err)
+	}
+	env.applyAll(t)
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"gh"}, RemovalOptions{})
+	if err != nil {
+		t.Fatalf("PlanRemoval() error = %v", err)
+	}
+	if len(rp.Items) != 1 {
+		t.Fatalf("Items = %+v, want one OpUpdate for .claude.json", rp.Items)
+	}
+	it := rp.Items[0]
+	if it.Op != OpUpdate || it.RelPath != ".claude.json" {
+		t.Errorf("item = %+v, want OpUpdate on .claude.json", it)
+	}
+	desired := string(it.Desired)
+	if strings.Contains(desired, "\"gh\"") {
+		t.Errorf("server entry not removed from Desired:\n%s", desired)
+	}
+	if !strings.Contains(desired, "\t\"numStartups\": 42") || !strings.Contains(desired, "\"user-own\": {\"command\": \"deno\"}") {
+		t.Errorf("user config bytes not preserved:\n%s", desired)
 	}
 }
 
@@ -214,7 +250,7 @@ func TestPlanRemoval_UnknownArtifactInManifest_WarnsDoesNotCrash(t *testing.T) {
 	}
 	env.store.Manifest.Artifacts = kept
 
-	rp, err := env.eng.PlanRemoval(context.Background(), []string{"review"})
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"review"}, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v (must not error/crash)", err)
 	}
@@ -259,7 +295,7 @@ func TestPlanRemoval_AgentNotDetected_SkipsButClearsState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rp, err := eng.PlanRemoval(context.Background(), []string{"review"})
+	rp, err := eng.PlanRemoval(context.Background(), []string{"review"}, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -302,7 +338,7 @@ func TestPlanRemoval_RejectsDeleteOutsideOwnedPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rp, err := eng.PlanRemoval(context.Background(), []string{"plan"})
+	rp, err := eng.PlanRemoval(context.Background(), []string{"plan"}, RemovalOptions{})
 	if err != nil {
 		t.Fatalf("PlanRemoval() error = %v", err)
 	}
@@ -324,7 +360,7 @@ func TestApplySwitch_WithoutConfirmationWritesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	removalPlan, err := env.eng.PlanRemoval(context.Background(), []string{"gone"})
+	removalPlan, err := env.eng.PlanRemoval(context.Background(), []string{"gone"}, RemovalOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +401,7 @@ func TestApplySwitch_InstallAndRemovalInOneStateSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	removalPlan, err := env.eng.PlanRemoval(context.Background(), []string{"old"})
+	removalPlan, err := env.eng.PlanRemoval(context.Background(), []string{"old"}, RemovalOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +440,7 @@ func TestApplySwitch_PartialWriteThenRerunConverges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	removalPlan, err := env.eng.PlanRemoval(context.Background(), []string{"gone"})
+	removalPlan, err := env.eng.PlanRemoval(context.Background(), []string{"gone"}, RemovalOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,5 +458,231 @@ func TestApplySwitch_PartialWriteThenRerunConverges(t *testing.T) {
 	}
 	if len(ids) != 0 {
 		t.Errorf("InstalledArtifactIDs() = %v, want empty — state now converged", ids)
+	}
+}
+
+func TestPlanRemoval_EditedReplaceFile_SkippedWithoutForceRemovedWith(t *testing.T) {
+	env := newTestEnv(t)
+	if _, err := env.store.New(domain.KindCommand, "plan"); err != nil {
+		t.Fatal(err)
+	}
+	env.applyAll(t)
+
+	cmdPath := filepath.Join(env.home, "commands", "plan.md")
+	if err := os.WriteFile(cmdPath, []byte("user rewrote this\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"plan"}, RemovalOptions{})
+	if err != nil {
+		t.Fatalf("PlanRemoval() error = %v", err)
+	}
+	if len(rp.Items) != 0 {
+		t.Errorf("Items = %+v, want none — edited file must be skipped", rp.Items)
+	}
+	if len(rp.Warnings) != 1 || !strings.Contains(rp.Warnings[0].Reason, "--force") {
+		t.Errorf("Warnings = %v, want one pointing at --force", rp.Warnings)
+	}
+
+	forced, err := env.eng.PlanRemoval(context.Background(), []string{"plan"}, RemovalOptions{Force: true})
+	if err != nil {
+		t.Fatalf("PlanRemoval(force) error = %v", err)
+	}
+	if len(forced.Items) != 1 || forced.Items[0].Op != OpDelete {
+		t.Errorf("forced Items = %+v, want the delete", forced.Items)
+	}
+}
+
+func TestPlanRemoval_SkillDirWithUserAddedFile_SkippedWithoutForce(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "review")
+	env.applyAll(t)
+
+	if err := os.WriteFile(filepath.Join(env.home, "skills", "review", "my-notes.md"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"review"}, RemovalOptions{})
+	if err != nil {
+		t.Fatalf("PlanRemoval() error = %v", err)
+	}
+	if len(rp.Items) != 0 {
+		t.Errorf("Items = %+v, want none — dir with a user file must be skipped", rp.Items)
+	}
+	if len(rp.Warnings) != 1 || !strings.Contains(rp.Warnings[0].Reason, "not installed by loadout") {
+		t.Errorf("Warnings = %v, want one naming the foreign file", rp.Warnings)
+	}
+}
+
+func TestPlanRemoval_EditedBlock_SkippedWithoutForce(t *testing.T) {
+	env := newTestEnv(t)
+	if _, err := env.store.New(domain.KindInstruction, "style"); err != nil {
+		t.Fatal(err)
+	}
+	env.applyAll(t)
+
+	claudeMD := filepath.Join(env.home, "CLAUDE.md")
+	raw, err := os.ReadFile(claudeMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(raw), "<!-- loadout:end style -->", "user edit inside the block\n<!-- loadout:end style -->", 1)
+	if err := os.WriteFile(claudeMD, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"style"}, RemovalOptions{})
+	if err != nil {
+		t.Fatalf("PlanRemoval() error = %v", err)
+	}
+	if len(rp.Items) != 0 {
+		t.Errorf("Items = %+v, want none — edited block must be skipped", rp.Items)
+	}
+	if len(rp.Warnings) != 1 || !strings.Contains(rp.Warnings[0].Reason, "--force") {
+		t.Errorf("Warnings = %v, want one pointing at --force", rp.Warnings)
+	}
+}
+
+func TestApplyRemoval_WithoutConfirmationWritesNothing(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "gone")
+	env.applyAll(t)
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"gone"}, RemovalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.eng.ApplyRemoval(context.Background(), rp, nil); err != ErrNotConfirmed {
+		t.Fatalf("ApplyRemoval(nil confirm) error = %v, want ErrNotConfirmed", err)
+	}
+	if _, err := env.eng.ApplyRemoval(context.Background(), rp, func(*RemovalPlan) bool { return false }); err != ErrNotConfirmed {
+		t.Fatalf("ApplyRemoval(decline) error = %v, want ErrNotConfirmed", err)
+	}
+	if _, err := os.Stat(filepath.Join(env.home, "skills", "gone", "SKILL.md")); err != nil {
+		t.Fatal("nothing may be removed without confirmation")
+	}
+}
+
+func TestApplyRemoval_RemovesFilesAndClearsState(t *testing.T) {
+	env := newTestEnv(t)
+	env.addSkill(t, "gone")
+	env.applyAll(t)
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"gone"}, RemovalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := env.eng.ApplyRemoval(context.Background(), rp, func(*RemovalPlan) bool { return true })
+	if err != nil {
+		t.Fatalf("ApplyRemoval() error = %v", err)
+	}
+	if n != 1 {
+		t.Errorf("removed = %d, want 1", n)
+	}
+	if _, err := os.Stat(filepath.Join(env.home, "skills", "gone")); !os.IsNotExist(err) {
+		t.Error("skill directory should be gone")
+	}
+	ids, err := env.eng.InstalledArtifactIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("InstalledArtifactIDs() = %v, want empty", ids)
+	}
+}
+
+func TestApplyRemoval_SnapshotsStoreFilesAndRestoreResurrects(t *testing.T) {
+	env := newTestEnv(t)
+	backupDir := filepath.Join(env.store.Root, "..", "backups")
+	env.eng.BackupDir = backupDir
+	env.addSkill(t, "gone")
+	env.applyAll(t)
+
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"gone"}, RemovalOptions{RemoveStore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rp.StoreFiles) != 2 {
+		t.Fatalf("StoreFiles = %+v, want content dir + manifest", rp.StoreFiles)
+	}
+	if _, err := env.eng.ApplyRemoval(context.Background(), rp, func(*RemovalPlan) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate the CLI's follow-up store deletion.
+	if err := env.store.RemoveArtifact("gone"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(env.store.Root, "skills", "gone")); !os.IsNotExist(err) {
+		t.Fatal("store content should be deleted")
+	}
+
+	snaps, err := ListSnapshots(backupDir)
+	if err != nil || len(snaps) == 0 {
+		t.Fatalf("ListSnapshots() = %v, %v — want the rm snapshot", snaps, err)
+	}
+	snap := snaps[0]
+	if snap.Trigger != "rm" {
+		t.Errorf("Trigger = %q, want rm", snap.Trigger)
+	}
+	if _, err := env.eng.ApplyRestore(context.Background(), &snap, func(*Snapshot) bool { return true }); err != nil {
+		t.Fatalf("ApplyRestore() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(env.store.Root, "skills", "gone", "SKILL.md")); err != nil {
+		t.Error("restore should resurrect the store content")
+	}
+	raw, err := os.ReadFile(filepath.Join(env.store.Root, "loadout.yaml"))
+	if err != nil || !strings.Contains(string(raw), "gone") {
+		t.Error("restore should resurrect the manifest entry")
+	}
+	if _, err := os.Stat(filepath.Join(env.home, "skills", "gone", "SKILL.md")); err != nil {
+		t.Error("restore should resurrect the installed skill file")
+	}
+}
+
+func TestApplyRemoval_DriftSkipRetainsStateSoForceStillWorks(t *testing.T) {
+	env := newTestEnv(t)
+	if _, err := env.store.New(domain.KindCommand, "plan"); err != nil {
+		t.Fatal(err)
+	}
+	env.applyAll(t)
+
+	cmdPath := filepath.Join(env.home, "commands", "plan.md")
+	if err := os.WriteFile(cmdPath, []byte("user rewrote this\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// First rm: drift-skips the edited file but must NOT forget it was
+	// loadout-installed — otherwise --force afterwards has nothing to act on.
+	rp, err := env.eng.PlanRemoval(context.Background(), []string{"plan"}, RemovalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.eng.ApplyRemoval(context.Background(), rp, func(*RemovalPlan) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := env.eng.InstalledArtifactIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != "plan" {
+		t.Fatalf("InstalledArtifactIDs() = %v, want the drift-skipped record retained", ids)
+	}
+
+	forced, err := env.eng.PlanRemoval(context.Background(), []string{"plan"}, RemovalOptions{Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(forced.Items) != 1 {
+		t.Fatalf("forced Items = %+v, want the delete to still be plannable", forced.Items)
+	}
+	if _, err := env.eng.ApplyRemoval(context.Background(), forced, func(*RemovalPlan) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(cmdPath); !os.IsNotExist(err) {
+		t.Error("--force should remove the edited file")
+	}
+	ids, _ = env.eng.InstalledArtifactIDs()
+	if len(ids) != 0 {
+		t.Errorf("state should be fully cleared after the forced removal, got %v", ids)
 	}
 }

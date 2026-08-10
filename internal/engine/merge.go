@@ -139,6 +139,160 @@ func setLeaf(existing []byte, path string, value any) ([]byte, bool, error) {
 	return out, true, nil
 }
 
+// jsonRemove computes the inverse of jsonMerge: the current bytes with exactly
+// the fragment's contribution removed, surgically — bytes outside the removed
+// keys are preserved, and the file itself is never emptied to nothing the
+// caller wouldn't expect (the root object always survives). Returns the drifted
+// paths: places where the on-disk value no longer matches the fragment, which
+// are left in place unless force is set.
+func jsonRemove(existing, fragment []byte, force bool) (out []byte, changed bool, drifted []string, err error) {
+	var frag any
+	if err := json.Unmarshal(fragment, &frag); err != nil {
+		return nil, false, nil, fmt.Errorf("invalid JSON fragment: %w", err)
+	}
+	if len(bytes.TrimSpace(existing)) == 0 {
+		return existing, false, nil, nil
+	}
+	// Reject a corrupt existing file loudly — same discipline as jsonMerge.
+	var probe any
+	if err := json.Unmarshal(existing, &probe); err != nil {
+		return nil, false, nil, fmt.Errorf("existing file is not valid JSON: %w", err)
+	}
+	fm, ok := frag.(map[string]any)
+	if !ok {
+		return nil, false, nil, fmt.Errorf("fragment root must be a JSON object")
+	}
+	result, changed, drifted, err := removeMapKeys(existing, "", fm, force)
+	if err != nil {
+		return nil, false, nil, err
+	}
+	if !changed {
+		return existing, false, drifted, nil
+	}
+	return result, true, drifted, nil
+}
+
+// removeMapKeys deletes this map's fragment-defined keys from existing.
+// Removal is atomic within the object that directly contains an edited value:
+// if any of this map's own keys drifted (value differs and the shapes don't
+// allow recursing), every deletion inside this map is rolled back and the
+// drift reported — a partially-edited unit (e.g. one MCP server entry) is
+// removed whole under force or left whole, never gutted.
+func removeMapKeys(existing []byte, path string, frag map[string]any, force bool) ([]byte, bool, []string, error) {
+	pre := existing
+	result := existing
+	anyChange := false
+	var drifts []string
+	directDrift := false
+
+	for _, k := range sortedKeys(frag) {
+		sub := joinPath(path, k)
+		existingAt := gjson.GetBytes(result, sub)
+		if !existingAt.Exists() {
+			continue // already absent — nothing of ours here
+		}
+		if jsonEqual(existingAt.Raw, frag[k]) {
+			next, err := sjson.DeleteBytes(result, sub)
+			if err != nil {
+				return nil, false, nil, fmt.Errorf("remove %q: %w", sub, err)
+			}
+			result = next
+			anyChange = true
+			continue
+		}
+		if subMap, ok := frag[k].(map[string]any); ok && existingAt.IsObject() {
+			next, subChanged, subDrifts, err := removeMapKeys(result, sub, subMap, force)
+			if err != nil {
+				return nil, false, nil, err
+			}
+			// Prune the object when our removals emptied it — an empty
+			// "mcpServers": {} left behind is noise, not user content.
+			if subChanged {
+				if at := gjson.GetBytes(next, sub); at.IsObject() && len(at.Map()) == 0 {
+					if next, err = sjson.DeleteBytes(next, sub); err != nil {
+						return nil, false, nil, fmt.Errorf("prune %q: %w", sub, err)
+					}
+				}
+			}
+			result = next
+			anyChange = anyChange || subChanged
+			drifts = append(drifts, subDrifts...)
+			continue
+		}
+		if arr, ok := frag[k].([]any); ok && existingAt.IsArray() {
+			next, subChanged, missing, err := removeArrayItems(result, sub, arr)
+			if err != nil {
+				return nil, false, nil, err
+			}
+			result = next
+			anyChange = anyChange || subChanged
+			if missing {
+				// An installed array item was edited or hand-removed; it can't
+				// be identified anymore, so it stays — even under force.
+				drifts = append(drifts, sub)
+				directDrift = true
+			}
+			continue
+		}
+		// Value differs and the shapes don't allow recursion: a user edit.
+		if force {
+			next, err := sjson.DeleteBytes(result, sub)
+			if err != nil {
+				return nil, false, nil, fmt.Errorf("remove %q: %w", sub, err)
+			}
+			result = next
+			anyChange = true
+			continue
+		}
+		drifts = append(drifts, sub)
+		directDrift = true
+	}
+
+	if directDrift && !force {
+		return pre, false, drifts, nil
+	}
+	return result, anyChange, drifts, nil
+}
+
+// removeArrayItems removes elements deep-equal to the fragment's items — the
+// inverse of setLeaf's array union. User-added elements survive; an emptied
+// array is deleted outright. missing reports fragment items with no deep-equal
+// element left (edited or already removed by hand — unidentifiable).
+func removeArrayItems(existing []byte, path string, fragItems []any) (out []byte, changed, missing bool, err error) {
+	existingAt := gjson.GetBytes(existing, path)
+	var current []any
+	if err := json.Unmarshal([]byte(existingAt.Raw), &current); err != nil {
+		return nil, false, false, err
+	}
+	for _, item := range fragItems {
+		if !containsDeep(current, item) {
+			missing = true
+		}
+	}
+	kept := make([]any, 0, len(current))
+	for _, cur := range current {
+		if !containsDeep(fragItems, cur) {
+			kept = append(kept, cur)
+		}
+	}
+	if len(kept) == len(current) {
+		return existing, false, missing, nil
+	}
+	if len(kept) == 0 {
+		out, err := sjson.DeleteBytes(existing, path)
+		return out, err == nil, missing, err
+	}
+	raw, err := json.Marshal(kept)
+	if err != nil {
+		return nil, false, false, err
+	}
+	out, err = sjson.SetRawBytes(existing, path, raw)
+	if err != nil {
+		return nil, false, false, fmt.Errorf("remove from %q: %w", path, err)
+	}
+	return out, true, missing, nil
+}
+
 // jsonEqual reports whether raw and want represent the same JSON value —
 // tolerant of whitespace and key order.
 func jsonEqual(raw string, want any) bool {

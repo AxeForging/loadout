@@ -21,6 +21,7 @@ func Commands() []*cli.Command {
 		restoreCmd(),
 		newCmd(),
 		addCmd(),
+		rmCmd(),
 		sourceCmd(),
 		checkCmd(),
 		updateCmd(),
