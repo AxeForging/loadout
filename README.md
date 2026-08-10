@@ -27,14 +27,20 @@ Agent configs are fragmented across `~/.claude`, `~/.codex`, `~/.gemini`, `~/.cu
 
 ## Install
 
+One-liner (uses your `gh` login — no manual token handling):
+
 ```bash
-curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/AxeForging/loadout/main/install.sh | sh
+GITHUB_TOKEN=$(gh auth token) sh -c \
+  'curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" https://raw.githubusercontent.com/AxeForging/loadout/main/install.sh | sh'
 ```
 
-The installer downloads the release for your platform and verifies its SHA-256
-checksum. Because Loadout is private, `GITHUB_TOKEN` must be able to read the
-repository. Set `LOADOUT_VERSION=v1.4.0` to pin a release or
+No `gh`? Export a `GITHUB_TOKEN` that can read this repository and run the
+inner `curl … | sh` directly.
+
+The installer resolves the latest release, downloads the binary for your
+platform and verifies its SHA-256 checksum before installing — with a token it
+goes through the GitHub REST API (private-repo release assets are not served on
+the plain download URLs). Set `LOADOUT_VERSION=v4.1.0` to pin a release or
 `LOADOUT_INSTALL_DIR=~/.local/bin` to choose the destination. `go install
 github.com/AxeForging/loadout/cmd/loadout@latest` remains supported.
 
