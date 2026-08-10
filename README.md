@@ -8,7 +8,7 @@ Your agentic gear kit. loadout keeps AI-agent configs — skills, instructions, 
 
 Skills use the open [Agent Skills](https://agentskills.io) standard (`SKILL.md`), so the canonical format is the native format: loadout places them, tracks them, and keeps them in sync everywhere.
 
-**Current release: v1.0.0** — canonical store, sync engine with drift detection, all five agent adapters, external git sources, shareable bundles, builder wizard with crash-safe SDD, AI drafting via your logged-in agents, TUI and embedded web UI ([ROADMAP.md](ROADMAP.md) — v1 complete).
+**Current release: v0.1.0** — first public release: canonical store, sync engine with drift detection, all five agent adapters, external git sources, shareable bundles, builder wizard with crash-safe SDD, AI drafting via your logged-in agents, TUI and embedded web UI ([ROADMAP.md](ROADMAP.md)). Pre-1.0: minor versions may still move things around.
 
 **New here? Read [EXAMPLES.md](EXAMPLES.md)** — a hands-on walkthrough ending with a real Claude session using loadout-installed `/spec` and `/handoff`.
 
@@ -27,22 +27,18 @@ Agent configs are fragmented across `~/.claude`, `~/.codex`, `~/.gemini`, `~/.cu
 
 ## Install
 
-One-liner (uses your `gh` login — no manual token handling):
-
 ```bash
-GITHUB_TOKEN=$(gh auth token) sh -c \
-  'curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" https://raw.githubusercontent.com/AxeForging/loadout/main/install.sh | sh'
+curl -fsSL https://raw.githubusercontent.com/AxeForging/loadout/main/install.sh | sh
 ```
 
-No `gh`? Export a `GITHUB_TOKEN` that can read this repository and run the
-inner `curl … | sh` directly.
-
 The installer resolves the latest release, downloads the binary for your
-platform and verifies its SHA-256 checksum before installing — with a token it
-goes through the GitHub REST API (private-repo release assets are not served on
-the plain download URLs). Set `LOADOUT_VERSION=v4.1.0` to pin a release or
-`LOADOUT_INSTALL_DIR=~/.local/bin` to choose the destination. `go install
-github.com/AxeForging/loadout/cmd/loadout@latest` remains supported.
+platform and verifies its SHA-256 checksum before installing. Set
+`LOADOUT_VERSION=v0.1.0` to pin a release or `LOADOUT_INSTALL_DIR=~/.local/bin`
+to choose the destination. Installing from a private fork? Export a
+`GITHUB_TOKEN` with repo read access — the installer switches to the GitHub
+REST API automatically (private release assets are not served on the plain
+download URLs). `go install github.com/AxeForging/loadout/cmd/loadout@latest`
+remains supported.
 
 ## Pull request quality gates
 
