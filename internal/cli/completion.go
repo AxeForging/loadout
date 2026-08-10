@@ -43,7 +43,7 @@ func completionCmd() *cli.Command {
 const bashCompletion = `# loadout bash completion
 _loadout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="init status diff sync install restore new add source check update bundle spec wizard profile tui serve agents doctor version completion"
+    local commands="init status diff sync install restore new add rm source check update bundle spec wizard profile loadouts tui serve agents doctor version completion"
     COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
 }
 complete -F _loadout loadout
@@ -61,6 +61,7 @@ _loadout() {
         'restore:List or restore pre-write snapshots'
         'new:Scaffold a new artifact in the store'
         'add:Adopt an existing native artifact into the store'
+        'rm:Remove artifacts from the store and all agent homes'
         'source:Track skills from external git repositories'
         'check:Check sources for updates (non-intrusive)'
         'update:Fetch and apply source updates (gated)'
@@ -68,6 +69,7 @@ _loadout() {
         'spec:Spec-driven development checklists (files or GitHub issues)'
         'wizard:Guided builder for skills and conventions'
         'profile:Save and reuse named wizard answer sets'
+        'loadouts:Named, switchable sets of active artifacts'
         'tui:Interactive dashboard'
         'serve:Local web UI'
         'agents:List supported agents'
@@ -90,6 +92,7 @@ complete -c loadout -n '__fish_use_subcommand' -a install     -d 'First-time ful
 complete -c loadout -n '__fish_use_subcommand' -a restore     -d 'List or restore pre-write snapshots'
 complete -c loadout -n '__fish_use_subcommand' -a new         -d 'Scaffold a new artifact in the store'
 complete -c loadout -n '__fish_use_subcommand' -a add         -d 'Adopt an existing native artifact into the store'
+complete -c loadout -n '__fish_use_subcommand' -a rm          -d 'Remove artifacts from the store and all agent homes'
 complete -c loadout -n '__fish_use_subcommand' -a source      -d 'Track skills from external git repositories'
 complete -c loadout -n '__fish_use_subcommand' -a check       -d 'Check sources for updates (non-intrusive)'
 complete -c loadout -n '__fish_use_subcommand' -a update      -d 'Fetch and apply source updates (gated)'
@@ -97,6 +100,7 @@ complete -c loadout -n '__fish_use_subcommand' -a bundle      -d 'Export/import 
 complete -c loadout -n '__fish_use_subcommand' -a spec        -d 'Spec-driven development checklists (files or GitHub issues)'
 complete -c loadout -n '__fish_use_subcommand' -a wizard      -d 'Guided builder for skills and conventions'
 complete -c loadout -n '__fish_use_subcommand' -a profile     -d 'Save and reuse named wizard answer sets'
+complete -c loadout -n '__fish_use_subcommand' -a loadouts    -d 'Named, switchable sets of active artifacts'
 complete -c loadout -n '__fish_use_subcommand' -a tui         -d 'Interactive dashboard'
 complete -c loadout -n '__fish_use_subcommand' -a serve       -d 'Local web UI'
 complete -c loadout -n '__fish_use_subcommand' -a agents      -d 'List supported agents'

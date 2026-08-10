@@ -123,6 +123,33 @@ func (s *Store) AddArtifact(a domain.Artifact) error {
 	return s.SaveManifest()
 }
 
+// RemoveArtifact drops an artifact's manifest entry and deletes its content
+// files. Manifest first: a crash in between leaves orphaned content files on
+// disk (harmless — the manifest is the source of truth), never a manifest
+// entry pointing at nothing.
+func (s *Store) RemoveArtifact(id string) error {
+	idx := -1
+	for i, a := range s.Manifest.Artifacts {
+		if a.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("artifact %q not found", id)
+	}
+	a := s.Manifest.Artifacts[idx]
+	s.Manifest.Artifacts = append(s.Manifest.Artifacts[:idx], s.Manifest.Artifacts[idx+1:]...)
+	if err := s.SaveManifest(); err != nil {
+		return err
+	}
+	abs := filepath.Join(s.Root, a.Path)
+	if rel, err := filepath.Rel(s.Root, abs); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("artifact %q: content path %q escapes the store — entry removed, files left untouched", id, a.Path)
+	}
+	return os.RemoveAll(abs)
+}
+
 // Content reads an artifact's file set. Directory artifacts return every
 // regular file keyed by relative path; file artifacts return one entry keyed
 // by base name.

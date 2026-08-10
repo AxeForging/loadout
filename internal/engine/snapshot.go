@@ -72,6 +72,12 @@ func snapshotRel(root adapter.TargetRoot, relPath string) string {
 // overwrite or delete existing content. Pure creations (nothing on disk yet)
 // are ignored. Returns (nil, nil) when there is nothing to lose.
 func takeSnapshot(backupDir, trigger string, items []Item, now time.Time) (*Snapshot, error) {
+	return captureSnapshot(backupDir, trigger, itemSnapTargets(items), now)
+}
+
+// itemSnapTargets converts plan items into snapshot targets, keeping only
+// those that would overwrite or delete existing content.
+func itemSnapTargets(items []Item) []snapTarget {
 	targets := make([]snapTarget, 0, len(items))
 	for _, it := range items {
 		if it.Op != OpUpdate && it.Op != OpDelete {
@@ -82,7 +88,7 @@ func takeSnapshot(backupDir, trigger string, items []Item, now time.Time) (*Snap
 			op: it.Op, mode: it.Mode, isDir: it.IsDir, root: it.Root,
 		})
 	}
-	return captureSnapshot(backupDir, trigger, targets, now)
+	return targets
 }
 
 // captureSnapshot copies each target's current content into a fresh snapshot

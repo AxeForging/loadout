@@ -192,7 +192,7 @@ func runLoadoutSwitch(ctx context.Context, cmd *cli.Command, eng *engine.Engine,
 			removeIDs = append(removeIDs, id)
 		}
 	}
-	removalPlan, err := eng.PlanRemoval(ctx, removeIDs)
+	removalPlan, err := eng.PlanRemoval(ctx, removeIDs, engine.RemovalOptions{Force: cmd.Bool("force")})
 	if err != nil {
 		return err
 	}

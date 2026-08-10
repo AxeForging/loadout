@@ -101,7 +101,7 @@ loadout is built in shippable milestones — every milestone leaves `main` relea
 
 - Codex `config.toml` settings **and MCP** merge without destroying user comments (comment-preserving TOML editor or managed `# loadout:begin/end` line block — the block helpers currently hardcode HTML-comment sentinels end-to-end, so this needs a marker-style-aware refactor; spec 006 dropped codex MCP for exactly this reason)
 - Antigravity MCP config: exact file location unverified — verify against a real install, then wire `Supports(KindMCP)` (spec 006 marked it SHOULD)
-- MCP uninstall: `json-merge` removal is still unsupported, so removing an MCP artifact leaves the merged entry behind (warned, state cleared) — a keyed "remove this JSON path" removal would fix hooks-in-settings too
+- ~~MCP uninstall: `json-merge` removal~~ — ✅ resolved by spec 009 (`loadout rm`): keyed JSON removal cleans MCP entries and hooks-in-settings surgically, with drift-safe skips and store-inclusive snapshots
 - Local secret-overrides file for MCP env values (machine-local, data-dir) if the `${VAR}`-placeholder-only policy proves painful
 - Project-scoped artifacts (`.cursor/rules/*.mdc`, `.agents/{rules,workflows,skills}`, per-repo CLAUDE.md) — per-project loadout manifests; the engine-side root plumbing (`TargetFile.Root`, `--project`, root-qualified state keys) landed with spec 006
 - `loadout spec` follow-ups (spec 007 shipped the CLI + gh backend): more backends (Jira/Linear), PR <-> spec linking, spec progress in web UI/TUI

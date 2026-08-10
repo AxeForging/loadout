@@ -82,7 +82,7 @@ func TestApplySwitch_SnapshotsDeletedSkillDirectory(t *testing.T) {
 	env.applyAll(t)
 
 	// Remove "review" via a switch (empty install plan + removal of the skill).
-	removal, err := env.eng.PlanRemoval(context.Background(), []string{"review"})
+	removal, err := env.eng.PlanRemoval(context.Background(), []string{"review"}, RemovalOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

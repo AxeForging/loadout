@@ -197,7 +197,7 @@ func TestLoadouts_SwitchAgentNotInstalled_BehavesLikeSyncSkip(t *testing.T) {
 	}
 }
 
-func TestLoadouts_HandEditedBlockStillGetsRemovedOnSwitch(t *testing.T) {
+func TestLoadouts_HandEditedBlockSkippedOnSwitchRemovedWithForce(t *testing.T) {
 	e := newEnv(t)
 	e.mustRun("init")
 	e.mustRun("new", "instruction", "style")
@@ -214,16 +214,28 @@ func TestLoadouts_HandEditedBlockStillGetsRemovedOnSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// "other" excludes "style" — switching to it must remove style's block.
+	// "other" excludes "style". Since spec 009, a hand-edited block is drift:
+	// a plain switch leaves it with a warning; --force removes it.
 	e.mustRun("loadouts", "save", "other", "demo")
-	e.mustRun("loadouts", "switch", "other", "--yes")
+	out := e.mustRun("loadouts", "switch", "other", "--yes")
+	if !strings.Contains(out, "--force") {
+		t.Fatalf("switch should warn about the edited block and point at --force:\n%s", out)
+	}
+	raw, err = os.ReadFile(claudeMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "hand-edited line") {
+		t.Fatalf("edited block must be left in place without --force:\n%s", raw)
+	}
 
+	e.mustRun("loadouts", "switch", "other", "--force", "--yes")
 	raw, err = os.ReadFile(claudeMD)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(raw), "loadout:begin style") {
-		t.Fatalf("drifted block should still be force-removed:\n%s", raw)
+		t.Fatalf("--force should remove the drifted block:\n%s", raw)
 	}
 }
 
