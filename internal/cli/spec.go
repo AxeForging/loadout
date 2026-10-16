@@ -15,12 +15,12 @@ import (
 func specCmd() *cli.Command {
 	return &cli.Command{
 		Name:      "spec",
-		Usage:     "Spec-driven development: numbered specs with checklists in files or GitHub issues",
+		Usage:     "Spec-driven development: numbered specs with checklists in files or GitHub issues (--backend issues: spec + plan entirely in issues)",
 		ArgsUsage: "<subcommand>",
 		Commands: []*cli.Command{
-			specSubCmd("init", "Scaffold the next free NNN-<name>.md spec (and its tracking issue on the github backend)", "<short-name>", specInitAction,
-				&cli.StringFlag{Name: "backend", Usage: "Persist the checklist backend for this project: local or github"},
-				&cli.StringSliceFlag{Name: "label", Usage: "Label for created issues (github backend); repeatable"}),
+			specSubCmd("init", "Scaffold the next free NNN-<name>.md spec (and its tracking issue on the github backend), or open spec(NNN): <name> as an issue (issues backend)", "<short-name>", specInitAction,
+				&cli.StringSliceFlag{Name: "label", Usage: "Label for created issues (github/issues backends); repeatable"},
+				&cli.StringFlag{Name: "style", Usage: "Issue body template for the issues backend: full or light", Value: "full"}),
 			specSubCmd("list", "List specs with checklist progress", "", specListAction),
 			specSubCmd("status", "Show checklist progress (all specs, or one)", "[spec]", specStatusAction,
 				&cli.BoolFlag{Name: "json", Usage: "Machine-readable output"},
@@ -29,21 +29,28 @@ func specCmd() *cli.Command {
 				func(ctx context.Context, cmd *cli.Command) error { return specSetAction(ctx, cmd, true) }),
 			specSubCmd("uncheck", "Mark a step open again (idempotent)", "<spec> <step-id>",
 				func(ctx context.Context, cmd *cli.Command) error { return specSetAction(ctx, cmd, false) }),
-			specSubCmd("sync", "Reconcile a spec's checklist with its GitHub issue (github backend)", "<spec>", specSyncAction,
+			specSubCmd("sync", "Reconcile a spec's checklist with its GitHub issue (github backend only)", "<spec>", specSyncAction,
 				&cli.BoolFlag{Name: "from-local", Usage: "Resolve check-state divergence from the local file"},
 				&cli.BoolFlag{Name: "from-github", Usage: "Resolve check-state divergence from the issue"}),
 		},
 	}
 }
 
-// specSubCmd builds one spec subcommand: every one takes --dir plus its own
-// extra flags.
+// specSubCmd builds one spec subcommand: every one takes --dir and
+// --backend plus its own extra flags.
 func specSubCmd(name, usage, argsUsage string, action cli.ActionFunc, extra ...cli.Flag) *cli.Command {
-	flags := append([]cli.Flag{&cli.StringFlag{
-		Name:  "dir",
-		Usage: "Specs directory relative to the project root",
-		Value: sdd.DefaultDir,
-	}}, extra...)
+	flags := append([]cli.Flag{
+		&cli.StringFlag{
+			Name:  "dir",
+			Usage: "Specs directory relative to the project root",
+			Value: sdd.DefaultDir,
+		},
+		&cli.StringFlag{
+			Name:    "backend",
+			Usage:   "local, github or issues (overrides sdd.yaml; on init, local/github are persisted to sdd.yaml — issues never writes a repo file)",
+			Sources: cli.EnvVars("LOADOUT_SDD_BACKEND"),
+		},
+	}, extra...)
 	return &cli.Command{Name: name, Usage: usage, ArgsUsage: argsUsage, Flags: flags, Action: action}
 }
 
@@ -53,6 +60,7 @@ type specEnv struct {
 	dir     string // absolute specs dir
 	cfg     sdd.Config
 	backend sdd.Backend
+	issues  *sdd.IssuesBackend // set when the backend is "issues"
 }
 
 func specSetup(cmd *cli.Command) (*specEnv, error) {
@@ -69,22 +77,40 @@ func specSetup(cmd *cli.Command) (*specEnv, error) {
 	if err != nil {
 		return nil, err
 	}
+	if b := cmd.String("backend"); b != "" {
+		if !sdd.ValidBackend(b) {
+			return nil, fmt.Errorf("unknown backend %q (local, github or issues)", b)
+		}
+		cfg.Backend = b
+	}
+	if labels := cmd.StringSlice("label"); len(labels) > 0 {
+		cfg.Labels = labels
+	}
 	env := &specEnv{root: root, dir: dir, cfg: cfg}
-	if cfg.Backend == sdd.BackendGitHub {
+	switch cfg.Backend {
+	case sdd.BackendGitHub:
 		env.backend = &sdd.GitHubBackend{Dir: dir, ProjectRoot: root, Config: &env.cfg}
-	} else {
+	case sdd.BackendIssues:
+		env.issues = &sdd.IssuesBackend{ProjectRoot: root, Config: &env.cfg}
+		env.backend = env.issues
+	default:
 		env.backend = &sdd.LocalBackend{Dir: dir}
 	}
 	return env, nil
 }
 
-func (e *specEnv) specs() ([]sdd.SpecInfo, error) { return sdd.ListSpecs(e.dir, e.cfg) }
-
-func (e *specEnv) resolve(ref string) (sdd.SpecInfo, error) {
-	if ref == "" {
-		return sdd.SpecInfo{}, fmt.Errorf("which spec? pass a number (007) or name fragment (sdd-workflow)")
+func (e *specEnv) specs(ctx context.Context) ([]sdd.SpecInfo, error) {
+	if e.issues != nil {
+		return e.issues.List(ctx)
 	}
-	specs, err := e.specs()
+	return sdd.ListSpecs(e.dir, e.cfg)
+}
+
+func (e *specEnv) resolve(ctx context.Context, ref string) (sdd.SpecInfo, error) {
+	if ref == "" {
+		return sdd.SpecInfo{}, fmt.Errorf("which spec? pass a number (007), an issue (#25) or a name fragment (sdd-workflow)")
+	}
+	specs, err := e.specs(ctx)
 	if err != nil {
 		return sdd.SpecInfo{}, err
 	}
@@ -100,14 +126,10 @@ func specInitAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if b := cmd.String("backend"); b != "" {
-		env.cfg.Backend = b
-		if labels := cmd.StringSlice("label"); len(labels) > 0 {
-			env.cfg.Labels = labels
-		}
-		if b != sdd.BackendLocal && b != sdd.BackendGitHub {
-			return fmt.Errorf("unknown backend %q (local or github)", b)
-		}
+	if env.issues != nil {
+		return specInitIssue(ctx, cmd, env, name)
+	}
+	if cmd.IsSet("backend") {
 		if err := os.MkdirAll(env.dir, 0o755); err != nil {
 			return err
 		}
@@ -138,17 +160,43 @@ func specInitAction(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+// specInitIssue opens a new spec issue on the issues backend. Nothing is
+// written into the repository.
+func specInitIssue(ctx context.Context, cmd *cli.Command, env *specEnv, name string) error {
+	style := cmd.String("style")
+	if style != "full" && style != "light" {
+		return fmt.Errorf("unknown --style %q (full or light)", style)
+	}
+	// Local spec files (if any) still reserve their numbers.
+	local, err := sdd.ListSpecs(env.dir, env.cfg)
+	if err != nil {
+		return err
+	}
+	spec, err := env.issues.Create(ctx, name, local, style == "full")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Opened spec issue #%d: %s (%s)\n", spec.Issue, spec.Title, env.cfg.Repo)
+	fmt.Println("Fill in the sections in the issue body; the plan goes between <!-- plan:start --> and <!-- plan:end -->.")
+	fmt.Printf("Track steps with 'loadout spec check %03d <step> --backend issues' (it re-fetches the body before editing).\n", spec.Number)
+	return nil
+}
+
 func specListAction(ctx context.Context, cmd *cli.Command) error {
 	env, err := specSetup(cmd)
 	if err != nil {
 		return err
 	}
-	specs, err := env.specs()
+	specs, err := env.specs(ctx)
 	if err != nil {
 		return err
 	}
 	if len(specs) == 0 {
-		fmt.Printf("No specs in %s yet — start one with 'loadout spec init <short-name>'.\n", env.dir)
+		where := env.dir
+		if env.issues != nil {
+			where = fmt.Sprintf("issues labelled %q", env.issues.Label())
+		}
+		fmt.Printf("No specs in %s yet — start one with 'loadout spec init <short-name>'.\n", where)
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 2, 4, 2, ' ', 0)
@@ -160,7 +208,10 @@ func specListAction(ctx context.Context, cmd *cli.Command) error {
 			progress = "?"
 		}
 		where := env.cfg.Backend
-		if s.Issue > 0 {
+		switch {
+		case env.issues != nil:
+			where = fmt.Sprintf("issue #%d", s.Issue)
+		case s.Issue > 0:
 			where = fmt.Sprintf("github #%d", s.Issue)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Name, progress, where)
@@ -188,12 +239,12 @@ func specStatusAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	var specs []sdd.SpecInfo
 	if ref := cmd.Args().First(); ref != "" {
-		s, err := env.resolve(ref)
+		s, err := env.resolve(ctx, ref)
 		if err != nil {
 			return err
 		}
 		specs = []sdd.SpecInfo{s}
-	} else if specs, err = env.specs(); err != nil {
+	} else if specs, err = env.specs(ctx); err != nil {
 		return err
 	}
 
@@ -253,7 +304,7 @@ func specSetAction(ctx context.Context, cmd *cli.Command, done bool) error {
 	if err != nil {
 		return err
 	}
-	spec, err := env.resolve(ref)
+	spec, err := env.resolve(ctx, ref)
 	if err != nil {
 		return err
 	}
@@ -278,10 +329,13 @@ func specSyncAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+	if env.cfg.Backend == sdd.BackendIssues {
+		return fmt.Errorf("spec sync is not applicable to the issues backend: the issue is the only copy, so there is nothing to reconcile")
+	}
 	if env.cfg.Backend != sdd.BackendGitHub {
 		return fmt.Errorf("spec sync only applies to the github backend (this project uses %q)", env.cfg.Backend)
 	}
-	spec, err := env.resolve(cmd.Args().First())
+	spec, err := env.resolve(ctx, cmd.Args().First())
 	if err != nil {
 		return err
 	}

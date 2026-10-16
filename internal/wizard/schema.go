@@ -147,10 +147,11 @@ func Sections() []Section {
 					Default: "light",
 				},
 				{
-					ID: "sdd.backend", Prompt: "Where do spec checklists live?", Type: TypeSelect,
+					ID: "sdd.backend", Prompt: "Where do specs and their checklists live?", Type: TypeSelect,
 					Options: opts(
 						"local", "Local files — checklists tracked inside docs/specs/*.md",
-						"github", "GitHub issues — one tracking issue per spec, via the gh CLI",
+						"github", "Spec files + GitHub checklist — spec in docs/specs, one tracking issue per spec, via the gh CLI",
+						"issues", "GitHub issues only — spec and plan live in one issue per spec, nothing in the repo (gh CLI)",
 					),
 					Default: "local",
 				},

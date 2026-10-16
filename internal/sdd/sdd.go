@@ -22,8 +22,9 @@ const ConfigFile = "sdd.yaml"
 
 // Config selects where checklist state lives for this project's specs.
 type Config struct {
-	// Backend is "local" (checklist in the spec file) or "github" (one
-	// issue per spec).
+	// Backend is "local" (checklist in the spec file), "github" (spec file
+	// in the repo, checklist in one issue per spec) or "issues" (spec and
+	// plan entirely in one issue per spec; nothing in the repo).
 	Backend string `yaml:"backend"`
 	// Repo is owner/name; auto-detected from the origin remote when empty.
 	Repo string `yaml:"repo,omitempty"`
@@ -37,6 +38,11 @@ const (
 	BackendLocal  = "local"
 	BackendGitHub = "github"
 )
+
+// ValidBackend reports whether name is a known backend.
+func ValidBackend(name string) bool {
+	return name == BackendLocal || name == BackendGitHub || name == BackendIssues
+}
 
 // LoadConfig reads <dir>/sdd.yaml; a missing file means the local backend.
 func LoadConfig(dir string) (Config, error) {
@@ -54,8 +60,8 @@ func LoadConfig(dir string) (Config, error) {
 	if cfg.Backend == "" {
 		cfg.Backend = BackendLocal
 	}
-	if cfg.Backend != BackendLocal && cfg.Backend != BackendGitHub {
-		return cfg, fmt.Errorf("%s: unknown backend %q (local or github)", ConfigFile, cfg.Backend)
+	if !ValidBackend(cfg.Backend) {
+		return cfg, fmt.Errorf("%s: unknown backend %q (local, github or issues)", ConfigFile, cfg.Backend)
 	}
 	return cfg, nil
 }
@@ -73,8 +79,9 @@ func (c Config) Save(dir string) error {
 type SpecInfo struct {
 	Number int
 	Name   string // NNN-slug (file base name without .md)
-	Path   string // spec file path
+	Path   string // spec file path ("" on the issues backend)
 	Issue  int    // github issue number; 0 = none
+	Title  string // issue title (issues backend)
 }
 
 // Backend is where a spec's checklist lives. Both implementations share the
@@ -120,9 +127,22 @@ func ListSpecs(dir string, cfg Config) ([]SpecInfo, error) {
 	return specs, nil
 }
 
-// Resolve finds one spec by number ("7", "007") or name prefix
-// ("sdd", "007-sdd"). Ambiguous prefixes are an error, never a guess.
+// Resolve finds one spec by number ("7", "007"), issue reference ("#25") or
+// name prefix ("sdd", "007-sdd"). Ambiguous prefixes are an error, never a
+// guess.
 func Resolve(specs []SpecInfo, ref string) (SpecInfo, error) {
+	if strings.HasPrefix(ref, "#") {
+		n, err := strconv.Atoi(ref[1:])
+		if err != nil {
+			return SpecInfo{}, fmt.Errorf("invalid issue reference %q", ref)
+		}
+		for _, s := range specs {
+			if s.Issue == n {
+				return s, nil
+			}
+		}
+		return SpecInfo{}, fmt.Errorf("no spec is tracked by issue #%d", n)
+	}
 	if n, err := strconv.Atoi(ref); err == nil {
 		for _, s := range specs {
 			if s.Number == n {

@@ -2,7 +2,7 @@
 
 **Status:** Draft — pending review
 **Owner:** Lucas Machado
-**Related:** spec 006 (first consumer of shipped presets alongside it), wizard embedded presets
+**Related:** spec 011 (issue #25) adds a third backend, `issues` (spec + plan entirely in GitHub issues); spec 006 (first consumer of shipped presets alongside it), wizard embedded presets
 
 ## Context
 
