@@ -19,6 +19,7 @@ func Commands() []*cli.Command {
 		syncCmd(),
 		installCmd(),
 		restoreCmd(),
+		adoptCmd(),
 		newCmd(),
 		addCmd(),
 		rmCmd(),

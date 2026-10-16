@@ -87,7 +87,7 @@ describe("SyncDock", () => {
     vi.mocked(api.overview).mockResolvedValue(overviewWithConflict);
     renderWithClient();
 
-    expect(await screen.findByText(/conflicting file/)).toBeInTheDocument();
+    expect(await screen.findByText(/held-back file/)).toBeInTheDocument();
     expect(screen.getByText("Review & apply")).toBeInTheDocument();
   });
 
@@ -110,5 +110,22 @@ describe("SyncDock", () => {
     await userEvent.click(apply);
 
     expect(api.syncApply).toHaveBeenCalledWith("tok-abcdef12", true);
+  });
+
+  it("labels a local edit as kept, and as discarded once overwrite is checked", async () => {
+    vi.mocked(api.overview).mockResolvedValue(overviewWithConflict);
+    vi.mocked(api.syncPlan).mockResolvedValue({
+      token: "tok-abcdef12",
+      changes: [],
+      conflicts: [{ op: "overwrite-local", agent: "claude-code", artifact: "conventions", relPath: "CLAUDE.md" }],
+    });
+    renderWithClient();
+
+    await userEvent.click(await screen.findByText("Review & apply"));
+    expect(await screen.findByText("! keep")).toBeInTheDocument();
+    expect(screen.queryByText("! skip")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByText("! discard")).toBeInTheDocument();
   });
 });

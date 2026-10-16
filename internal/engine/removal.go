@@ -431,7 +431,7 @@ func (e *Engine) ApplySwitch(ctx context.Context, install *Plan, removal *Remova
 	}
 
 	for _, it := range instChanges {
-		if err := writeItem(it); err != nil {
+		if err := writeChange(it); err != nil {
 			return 0, 0, err
 		}
 	}
@@ -537,8 +537,30 @@ func clearState(st state, rp *RemovalPlan) {
 	}
 }
 
-// writeItem is the MkdirAll+WriteFile+Chmod sequence Apply and ApplySwitch
-// both use for non-delete items.
+// writeChange writes one install item. Shared-file strategies (managed
+// blocks, JSON) re-merge the item's fragment into the file as it is on disk
+// right now, not the plan-time Desired: when an earlier item in the same
+// run was held back (spec 010), or forced through, the plan-time chain does
+// not match what is actually on disk, and re-merging keeps every other
+// block/key exactly as it is. For MergeReplace this is identical to Desired.
+func writeChange(it Item) error {
+	if it.Merge == adapter.MergeReplace {
+		return writeItem(it)
+	}
+	current, err := os.ReadFile(it.AbsPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", it.AbsPath, err)
+	}
+	desired, err := merged(it.Merge, current, it.Fragment)
+	if err != nil {
+		return fmt.Errorf("%s (%s): %w", it.RelPath, it.Artifact.ID, err)
+	}
+	it.Desired = desired
+	return writeItem(it)
+}
+
+// writeItem is the MkdirAll+WriteFile+Chmod sequence for non-delete items
+// whose Desired is final (whole-file installs and removal rewrites).
 func writeItem(it Item) error {
 	if err := os.MkdirAll(filepath.Dir(it.AbsPath), 0o755); err != nil {
 		return err

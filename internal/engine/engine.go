@@ -93,7 +93,18 @@ type Item struct {
 	// prove it owns the current content of. Such items are skipped unless the
 	// plan's OverwriteConflicts is set. See spec 004.
 	Conflict bool
+	// LocalEdit is true when writing Desired would discard edits the user
+	// made on disk to a text target loadout installed (drifted-local, or
+	// both store and disk moved). Skipped unless OverwriteConflicts is set,
+	// and its install record is kept as-is. See spec 010.
+	LocalEdit bool
+	// keepState makes groupFragments record the previous StateHash instead
+	// of the new fragment hash (set only on skipped local edits).
+	keepState bool
 }
+
+// blocked reports whether the item is held back unless the plan is forced.
+func (it Item) blocked() bool { return it.Conflict || it.LocalEdit }
 
 // Skip records an agent the plan left out entirely.
 type Skip struct {
@@ -112,20 +123,21 @@ type Plan struct {
 	Skips         []Skip
 	NotApplicable []NotApplicable
 	// OverwriteConflicts, when set by the caller after showing the plan,
-	// promotes conflicting items into Changes so Apply writes them. It is a
-	// per-run opt-in ("--force") and is never persisted.
+	// promotes blocked items (unowned conflicts and local edits) into
+	// Changes so Apply writes them. It is a per-run opt-in ("--force") and
+	// is never persisted.
 	OverwriteConflicts bool
 }
 
 // Changes returns the items Apply would write: every non-noop item, minus
-// conflicts that were skipped this run (unless OverwriteConflicts is set).
+// blocked items skipped this run (unless OverwriteConflicts is set).
 func (p *Plan) Changes() []Item {
 	var out []Item
 	for _, it := range p.Items {
 		if it.Op == OpNoop {
 			continue
 		}
-		if it.Conflict && !p.OverwriteConflicts {
+		if it.blocked() && !p.OverwriteConflicts {
 			continue
 		}
 		out = append(out, it)
@@ -133,13 +145,26 @@ func (p *Plan) Changes() []Item {
 	return out
 }
 
-// Conflicts returns the items Apply would refuse to write because they would
-// clobber a file loadout never installed (or can't prove it owns). They become
-// Changes only when OverwriteConflicts is set.
+// Conflicts returns every item Apply refuses to write without
+// OverwriteConflicts: files loadout never installed (Item.Conflict) and
+// local edits it would discard (Item.LocalEdit). Callers that need to tell
+// them apart check the item flags or use LocalEdits.
 func (p *Plan) Conflicts() []Item {
 	var out []Item
 	for _, it := range p.Items {
-		if it.Conflict {
+		if it.blocked() {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// LocalEdits returns the blocked items that carry the user's own edits to a
+// file loadout installed — the subset of Conflicts that `adopt` can keep.
+func (p *Plan) LocalEdits() []Item {
+	var out []Item
+	for _, it := range p.Items {
+		if it.LocalEdit {
 			out = append(out, it)
 		}
 	}
@@ -151,11 +176,18 @@ func (p *Plan) Conflicts() []Item {
 // conflict would make the next plan see it as loadout-installed (drifted-local)
 // and silently overwrite it on the second sync — the exact regression this
 // feature exists to prevent. See spec 004.
+//
+// A skipped local edit is kept but marked keepState: groupFragments records
+// its previous StateHash, so the file stays drifted-local instead of being
+// marked installed or losing its record.
 func (p *Plan) stateItems() []Item {
 	var out []Item
 	for _, it := range p.Items {
 		if it.Conflict && !p.OverwriteConflicts {
 			continue
+		}
+		if it.LocalEdit && !p.OverwriteConflicts {
+			it.keepState = true
 		}
 		out = append(out, it)
 	}
@@ -319,7 +351,6 @@ func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifac
 	if err != nil {
 		return Item{}, fmt.Errorf("%s (%s): %w", tf.RelPath, art.ID, err)
 	}
-	pending[abs] = desired
 
 	op := OpNoop
 	switch {
@@ -349,8 +380,46 @@ func (e *Engine) buildItem(agent domain.AgentID, home string, art domain.Artifac
 	// A whole-file target that already exists but loadout can't prove it owns
 	// (never installed, or both store and disk moved since install) is a
 	// conflict: overwriting it would silently destroy user content.
-	it.Conflict = op != OpNoop && tf.Merge == adapter.MergeReplace && classify(it) == domain.StateConflict
+	it.Conflict, it.LocalEdit = blockReason(it)
+	// pending threads desired content into later items sharing this file. A
+	// held-back item must not leak into them: otherwise a second managed
+	// block in the same CLAUDE.md would carry the store version of the
+	// skipped block and overwrite the local edit anyway.
+	if it.blocked() {
+		pending[abs] = current
+	} else {
+		pending[abs] = desired
+	}
 	return it, nil
+}
+
+// blockReason decides whether an item must be held back by default.
+//
+//   - conflict: a whole-file (MergeReplace) target exists on disk and loadout
+//     has no install record for it — someone else's file (spec 004).
+//   - localEdit: a text target (MergeReplace or MergeBlock) whose on-disk
+//     content is the user's edit of something loadout installed, or a
+//     managed block loadout has no record of (spec 010).
+//
+// MergeJSON targets are never blocked: the merge is key-scoped and agents
+// rewrite those files themselves; the pre-write snapshot is their net.
+func blockReason(it Item) (conflict, localEdit bool) {
+	if it.Op != OpUpdate {
+		return false, false
+	}
+	if it.Merge != adapter.MergeReplace && it.Merge != adapter.MergeBlock {
+		return false, false
+	}
+	switch classify(it) {
+	case domain.StateDriftedLocal:
+		return false, true
+	case domain.StateConflict:
+		if it.Merge == adapter.MergeReplace && it.StateHash == "" {
+			return true, false
+		}
+		return false, true
+	}
+	return false, false
 }
 
 // Apply writes every non-noop item, then records install state. The confirm
@@ -377,14 +446,7 @@ func (e *Engine) Apply(ctx context.Context, p *Plan, confirm func(*Plan) bool) (
 	}
 
 	for _, it := range changes {
-		if err := os.MkdirAll(filepath.Dir(it.AbsPath), 0o755); err != nil {
-			return 0, err
-		}
-		if err := os.WriteFile(it.AbsPath, it.Desired, it.Mode); err != nil {
-			return 0, fmt.Errorf("write %s: %w", it.AbsPath, err)
-		}
-		// WriteFile only applies the mode on creation; enforce it on updates.
-		if err := os.Chmod(it.AbsPath, it.Mode); err != nil {
+		if err := writeChange(it); err != nil {
 			return 0, err
 		}
 	}
@@ -430,6 +492,12 @@ func groupFragments(items []Item) map[groupKey]map[string]string {
 		fileKey := it.StateKey
 		if fileKey == "" {
 			fileKey = it.RelPath
+		}
+		if it.keepState {
+			if it.StateHash != "" {
+				groups[key][fileKey] = it.StateHash
+			}
+			continue
 		}
 		groups[key][fileKey] = fragmentHash(it.Merge, it.Fragment)
 	}

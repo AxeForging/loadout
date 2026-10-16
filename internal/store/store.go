@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -184,6 +185,43 @@ func (s *Store) Content(a domain.Artifact) (domain.Content, error) {
 		return nil
 	})
 	return c, err
+}
+
+// ContentRelPath maps a content file key (as returned by Content) to its
+// store-relative path.
+func (s *Store) ContentRelPath(a domain.Artifact, key string) string {
+	abs := filepath.Join(s.Root, a.Path)
+	if info, err := os.Stat(abs); err == nil && !info.IsDir() {
+		return filepath.ToSlash(a.Path)
+	}
+	return path.Join(filepath.ToSlash(a.Path), key)
+}
+
+// WriteContent overwrites existing content files of an artifact, keyed as
+// Content returns them. It refuses keys that are not already part of the
+// artifact or that escape its directory — it updates, never adds.
+func (s *Store) WriteContent(a domain.Artifact, files map[string][]byte) error {
+	current, err := s.Content(a)
+	if err != nil {
+		return err
+	}
+	for key, raw := range files {
+		if _, ok := current.Files[key]; !ok {
+			return fmt.Errorf("artifact %s has no file %q", a.ID, key)
+		}
+		abs := filepath.Join(s.Root, filepath.FromSlash(s.ContentRelPath(a, key)))
+		if rel, err := filepath.Rel(s.Root, abs); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("artifact %s: %q escapes the store", a.ID, key)
+		}
+		mode := fs.FileMode(0o644)
+		if info, err := os.Stat(abs); err == nil {
+			mode = info.Mode().Perm()
+		}
+		if err := WriteFileAtomic(abs, raw, mode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Hash returns a stable content hash over an artifact's file set.

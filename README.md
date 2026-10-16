@@ -63,9 +63,10 @@ loadout sync                     # install into detected agents (asks first)
 |---------|---------|
 | `loadout init` | Create the canonical store (git-friendly directory with a starter manifest) |
 | `loadout status [artifact...]` | Drift matrix: every artifact's sync state per agent |
-| `loadout diff [artifact...]` | Unified diffs of what sync would change — or `loadout diff <skill> --upstream` to diff a sourced skill against its upstream repo |
+| `loadout diff [artifact...]` | Unified diffs of what sync would change, including held-back conflicts and local edits — or `loadout diff <skill> --upstream` to diff a sourced skill against its upstream repo |
 | `loadout sync [artifact...]` | Install/update artifacts in agent homes — always asks before writing (`--dry-run`, `--yes`, `--agent`, `--force`, `--project` for project-scoped MCP configs) |
 | `loadout install <agent>` | First-time full install into one agent (`--force`) |
+| `loadout adopt <artifact> --agent <agent>` | Copy your local edits of an installed artifact back into the store (shows the store diff, asks first; `--dry-run`, `--yes`). Refuses when the agent stores the artifact in its own format |
 | `loadout restore [snapshot-id]` | List pre-write snapshots, or restore one (`--yes`) — recover files an overwrite replaced, including store files a `source-update` or `bundle-import` rewrote |
 | `loadout new <kind> <name>` | Scaffold a `skill`, `instruction`, `command`, `hook` or `mcp` — or draft a skill with `--ai "description"` via your logged-in agent |
 | `loadout add <path>` | Adopt an existing native artifact (skill/hook/mcp dir, command/instruction file) into the store |
@@ -166,9 +167,24 @@ Project scope resolves against `--project <dir>`, or the current directory when 
 
 ## Safety: conflicts and snapshots
 
-loadout will never silently destroy config you already had. Two guards protect a newcomer who imports someone else's bundle and syncs:
+loadout will never silently destroy config you already had. Three guards protect you when you sync:
 
-- **Conflicts are skipped by default.** A whole-file artifact (skill, command, hook script) whose target already exists on disk but was *never installed by loadout* is reported as a `conflict` and left untouched. `sync` tells you what it skipped and stops there. Re-run with `--force` to overwrite them on purpose — for example when a store's `plan` command collides with a `~/.claude/commands/plan.md` you wrote yourself. Files loadout provably installed (`drifted-local`) still re-converge on a normal sync; only genuinely-unowned files need `--force`.
+- **Conflicts are skipped by default.** A whole-file artifact (skill, command, hook script) whose target already exists on disk but was *never installed by loadout* is reported as a `conflict` and left untouched. `sync` tells you what it skipped and stops there. Re-run with `--force` to overwrite them on purpose — for example when a store's `plan` command collides with a `~/.claude/commands/plan.md` you wrote yourself.
+
+- **Local edits are kept by default.** If you hand-edit a skill, command or managed instruction block that loadout installed (`drifted-local`, or `conflict` when the store moved too), `sync` does not quietly put the store version back. The plan marks it `! keep` and tells you how to resolve it:
+
+  ```
+  Plan: 1 change(s)
+    create claude-code: skills/other/SKILL.md  (other)
+    ! keep   claude-code: CLAUDE.md  (conventions) — edited locally since install; not overwritten
+
+  1 file(s) have local edits that are not in the store — kept as-is.
+    inspect:  loadout diff conventions --agent claude-code
+    keep:     loadout adopt conventions --agent claude-code   (copies the edits into the store)
+    discard:  re-run with --force           (a snapshot is taken first)
+  ```
+
+  With `--force` the line becomes `! overwrite-local` and the edit is snapshotted before it is replaced. Merged JSON (settings, MCP servers) still re-converges on a normal sync: those files are rewritten by the agents themselves, and the merge only touches loadout's own keys.
 
 - **A snapshot is taken before any overwrite or delete.** Right before `sync`, a loadout `switch`, an `rm`, or a `--force` write touches an existing file, loadout copies the originals into a timestamped snapshot under the machine-local data dir (`<data>/loadout/backups/<timestamp>/`). An `rm` snapshot also captures the artifact's store files (manifest entry + content), so restoring it resurrects the artifact even in a store that isn't git-tracked. Recover them any time:
 

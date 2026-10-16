@@ -43,7 +43,7 @@ func completionCmd() *cli.Command {
 const bashCompletion = `# loadout bash completion
 _loadout() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="init status diff sync install restore new add rm source check update bundle spec wizard profile loadouts tui serve agents doctor version completion"
+    local commands="init status diff sync install restore adopt new add rm source check update bundle spec wizard profile loadouts tui serve agents doctor version completion"
     COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
 }
 complete -F _loadout loadout
@@ -59,6 +59,7 @@ _loadout() {
         'sync:Install or update artifacts in agent homes'
         'install:First-time full install into one agent'
         'restore:List or restore pre-write snapshots'
+        'adopt:Copy local edits of an installed artifact back into the store'
         'new:Scaffold a new artifact in the store'
         'add:Adopt an existing native artifact into the store'
         'rm:Remove artifacts from the store and all agent homes'
@@ -90,6 +91,7 @@ complete -c loadout -n '__fish_use_subcommand' -a diff        -d 'Show what sync
 complete -c loadout -n '__fish_use_subcommand' -a sync        -d 'Install or update artifacts in agent homes'
 complete -c loadout -n '__fish_use_subcommand' -a install     -d 'First-time full install into one agent'
 complete -c loadout -n '__fish_use_subcommand' -a restore     -d 'List or restore pre-write snapshots'
+complete -c loadout -n '__fish_use_subcommand' -a adopt       -d 'Copy local edits of an installed artifact back into the store'
 complete -c loadout -n '__fish_use_subcommand' -a new         -d 'Scaffold a new artifact in the store'
 complete -c loadout -n '__fish_use_subcommand' -a add         -d 'Adopt an existing native artifact into the store'
 complete -c loadout -n '__fish_use_subcommand' -a rm          -d 'Remove artifacts from the store and all agent homes'

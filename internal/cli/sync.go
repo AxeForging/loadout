@@ -50,8 +50,7 @@ func runSync(ctx context.Context, cmd *cli.Command, eng *engine.Engine, f engine
 	if len(changes) == 0 {
 		if c := plan.Conflicts(); len(c) > 0 && !plan.OverwriteConflicts {
 			printChanges(plan)
-			fmt.Printf("\n%d conflicting file(s) exist on disk but were never installed by loadout — skipped.\n"+
-				"Re-run with --force to overwrite them (a snapshot is taken first).\n", len(c))
+			printHeldBack(plan)
 			return nil
 		}
 		fmt.Println("Everything in sync — nothing to do.")
@@ -60,6 +59,7 @@ func runSync(ctx context.Context, cmd *cli.Command, eng *engine.Engine, f engine
 
 	fmt.Printf("Plan: %d change(s)\n", len(changes))
 	printChanges(plan)
+	printHeldBack(plan)
 	if cmd.Bool("dry-run") {
 		fmt.Println("\nDry run — nothing written.")
 		return nil
