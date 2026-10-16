@@ -39,6 +39,16 @@ func doctorCmd() *cli.Command {
 
 			fmt.Println("Store:")
 			ok("manifest ok — %d artifact(s) at %s", len(s.Manifest.Artifacts), s.Root)
+			if h, found := s.GitHealth(ctx); found {
+				switch w := h.Warning(s.Root); {
+				case !h.Repo:
+					note("store is not a git repository — edits have no history (snapshots still cover overwrites)")
+				case w != "":
+					note("%s", w)
+				default:
+					ok("store committed — no uncommitted changes")
+				}
+			}
 			for _, art := range s.Manifest.Artifacts {
 				if err := checkArtifact(s, art); err != nil {
 					fail("artifact %s: %v", art.ID, err)

@@ -46,6 +46,7 @@ func runSync(ctx context.Context, cmd *cli.Command, eng *engine.Engine, f engine
 	}
 	plan.OverwriteConflicts = cmd.Bool("force")
 	printSkips(plan)
+	printStoreGitHint(ctx, eng.Store)
 	changes := plan.Changes()
 	if len(changes) == 0 {
 		if c := plan.Conflicts(); len(c) > 0 && !plan.OverwriteConflicts {
