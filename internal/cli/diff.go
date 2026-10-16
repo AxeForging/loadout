@@ -29,23 +29,42 @@ func diffCmd() *cli.Command {
 			if err != nil {
 				return err
 			}
-			changes := plan.Changes()
-			if len(changes) == 0 {
+			changes, held := plan.Changes(), plan.Conflicts()
+			if len(changes) == 0 && len(held) == 0 {
 				fmt.Println("Everything in sync — nothing to diff.")
 				printSkips(plan)
 				return nil
 			}
 			for _, it := range changes {
-				text, err := engine.UnifiedDiff(it)
-				if err != nil {
+				if err := printItemDiff(it, ""); err != nil {
 					return err
 				}
-				fmt.Printf("── %s · %s · %s\n%s\n", it.Agent, it.Artifact.ID, it.RelPath, text)
+			}
+			// Held-back items are not in Changes, but they are exactly what a
+			// user needs to inspect before choosing adopt or --force: '-' lines
+			// are what is on disk now and would be lost.
+			for _, it := range held {
+				note := " (held back: exists on disk, never installed by loadout — sync --force would write this)"
+				if it.LocalEdit {
+					note = " (held back: local edits — '-' lines are yours; sync --force would discard them, adopt keeps them)"
+				}
+				if err := printItemDiff(it, note); err != nil {
+					return err
+				}
 			}
 			printSkips(plan)
 			return nil
 		},
 	}
+}
+
+func printItemDiff(it engine.Item, note string) error {
+	text, err := engine.UnifiedDiff(it)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("── %s · %s · %s%s\n%s\n", it.Agent, it.Artifact.ID, it.RelPath, note, text)
+	return nil
 }
 
 // upstreamDiff handles `loadout diff <skill> --upstream`: the store copy vs

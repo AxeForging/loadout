@@ -174,20 +174,51 @@ func printSkips(p *engine.Plan) {
 	}
 }
 
-// printChanges lists what Apply would write, plus any conflicting files it
-// would refuse to overwrite (or, with --force, overwrite after snapshotting).
+// printChanges lists what Apply would write, plus every item it holds back
+// by default — files loadout never installed and local edits it would
+// discard — or, with --force, overwrites after snapshotting.
 func printChanges(p *engine.Plan) {
 	for _, it := range p.Changes() {
-		if it.Conflict { // only present when OverwriteConflicts is set
+		switch {
+		case it.LocalEdit: // only present when OverwriteConflicts is set
+			fmt.Printf("  ! overwrite-local %s: %s  (%s) — discards your local edits (snapshotted first)\n", it.Agent, it.RelPath, it.Artifact.ID)
+		case it.Conflict:
 			fmt.Printf("  ! force  %s: %s  (%s) — overwrites a file loadout never installed (snapshotted first)\n", it.Agent, it.RelPath, it.Artifact.ID)
+		default:
+			fmt.Printf("  %-6s %s: %s  (%s)\n", it.Op, it.Agent, it.RelPath, it.Artifact.ID)
+		}
+	}
+	if p.OverwriteConflicts {
+		return
+	}
+	for _, it := range p.Conflicts() {
+		if it.LocalEdit {
+			fmt.Printf("  ! keep   %s: %s  (%s) — edited locally since install; not overwritten\n", it.Agent, it.RelPath, it.Artifact.ID)
 			continue
 		}
-		fmt.Printf("  %-6s %s: %s  (%s)\n", it.Op, it.Agent, it.RelPath, it.Artifact.ID)
+		fmt.Printf("  ! skip   %s: %s  (%s) — exists on disk, never installed by loadout\n", it.Agent, it.RelPath, it.Artifact.ID)
 	}
-	if !p.OverwriteConflicts {
-		for _, it := range p.Conflicts() {
-			fmt.Printf("  ! skip   %s: %s  (%s) — exists on disk, never installed by loadout\n", it.Agent, it.RelPath, it.Artifact.ID)
-		}
+}
+
+// printHeldBack explains the items a non-forced plan skipped and how to
+// resolve them. It prints nothing for a forced plan or one with no blocked
+// items.
+func printHeldBack(p *engine.Plan) {
+	if p.OverwriteConflicts {
+		return
+	}
+	if locals := p.LocalEdits(); len(locals) > 0 {
+		ex := locals[0]
+		fmt.Printf("\n%d file(s) have local edits that are not in the store — kept as-is.\n"+
+			"  inspect:  loadout diff %s --agent %s\n"+
+			"  keep:     loadout adopt %s --agent %s   (copies the edits into the store)\n"+
+			"  discard:  re-run with --force           (a snapshot is taken first)\n",
+			len(locals), ex.Artifact.ID, ex.Agent, ex.Artifact.ID, ex.Agent)
+	}
+	unowned := len(p.Conflicts()) - len(p.LocalEdits())
+	if unowned > 0 {
+		fmt.Printf("\n%d conflicting file(s) exist on disk but were never installed by loadout — skipped.\n"+
+			"Re-run with --force to overwrite them (a snapshot is taken first).\n", unowned)
 	}
 }
 
@@ -195,7 +226,7 @@ func printChanges(p *engine.Plan) {
 func forceFlag() cli.Flag {
 	return &cli.BoolFlag{
 		Name:  "force",
-		Usage: "Overwrite conflicting files loadout never installed (a snapshot is taken first)",
+		Usage: "Overwrite held-back files — ones loadout never installed and local edits (a snapshot is taken first)",
 	}
 }
 

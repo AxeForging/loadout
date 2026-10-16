@@ -502,13 +502,14 @@ func TestApply_OverwritesConflictWhenForced(t *testing.T) {
 	}
 }
 
-func TestPlan_LocallyDriftedInstallIsNotBlocked(t *testing.T) {
+func TestPlan_LocallyDriftedInstallIsALocalEditNotAnUnownedConflict(t *testing.T) {
 	env := newTestEnv(t)
 	env.addSkill(t, "review")
 	env.applyAll(t)
 
-	// User edits a file loadout provably installed — this is drift, not a
-	// conflict, so re-converging must not require --force.
+	// User edits a file loadout provably installed. Spec 004 re-converged
+	// this silently; spec 010 holds it back as a local edit (distinct from a
+	// file loadout never owned) until the user forces or adopts it.
 	installed := filepath.Join(env.home, "skills", "review", "SKILL.md")
 	if err := os.WriteFile(installed, []byte("hand edited\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -517,11 +518,16 @@ func TestPlan_LocallyDriftedInstallIsNotBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Conflicts()) != 0 {
-		t.Errorf("locally-drifted install flagged as conflict: %v", plan.Conflicts())
+	blocked := plan.Conflicts()
+	if len(blocked) != 1 || blocked[0].Conflict || !blocked[0].LocalEdit {
+		t.Fatalf("want one LocalEdit (not Conflict) item, got %d blocked", len(blocked))
 	}
+	if len(plan.Changes()) != 0 {
+		t.Errorf("Changes() = %d item(s), want the local edit held back", len(plan.Changes()))
+	}
+	plan.OverwriteConflicts = true
 	if len(plan.Changes()) != 1 {
-		t.Errorf("Changes() = %v, want the drift re-converged without --force", plan.Changes())
+		t.Errorf("forced Changes() = %d item(s), want 1", len(plan.Changes()))
 	}
 }
 

@@ -165,8 +165,21 @@ export function SyncDock() {
                         title="show the exact diff overwriting would write"
                         className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 text-left font-mono text-xs transition-colors hover:bg-surface/60"
                       >
-                        <span className="w-16 whitespace-nowrap text-danger">
-                          {overwrite ? "! force" : "! skip"}
+                        <span
+                          className="w-16 whitespace-nowrap text-danger"
+                          title={
+                            c.op === "overwrite-local"
+                              ? "edited locally since install — kept unless you overwrite"
+                              : "exists on disk, never installed by loadout"
+                          }
+                        >
+                          {c.op === "overwrite-local"
+                            ? overwrite
+                              ? "! discard"
+                              : "! keep"
+                            : overwrite
+                              ? "! force"
+                              : "! skip"}
                         </span>
                         <span className="text-ink-dim">{c.agent}</span>
                         <span className="min-w-0 flex-1 truncate text-ink">{c.relPath}</span>
@@ -192,9 +205,10 @@ export function SyncDock() {
                     className="mt-0.5"
                   />
                   <span>
-                    Also overwrite {conflicts.length} conflicting file
-                    {conflicts.length === 1 ? "" : "s"} loadout never installed. A snapshot is taken
-                    first, so this stays recoverable via <span className="font-mono">loadout restore</span>.
+                    Also overwrite {conflicts.length} held-back file
+                    {conflicts.length === 1 ? "" : "s"} — never installed by loadout, or edited
+                    locally since install. A snapshot is taken first, so this stays recoverable via{" "}
+                    <span className="font-mono">loadout restore</span>.
                   </span>
                 </label>
               ) : null}
@@ -228,8 +242,8 @@ export function SyncDock() {
                   </>
                 ) : (
                   <>
-                    <span className="tnum font-medium text-ink">{pendingConflicts}</span> conflicting
-                    file{pendingConflicts === 1 ? "" : "s"} — never installed by loadout
+                    <span className="tnum font-medium text-ink">{pendingConflicts}</span> held-back
+                    file{pendingConflicts === 1 ? "" : "s"} — never installed by loadout or edited locally
                   </>
                 )}
               </p>

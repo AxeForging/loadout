@@ -200,11 +200,10 @@ func runLoadoutSwitch(ctx context.Context, cmd *cli.Command, eng *engine.Engine,
 	printSkips(installPlan)
 	printChanges(installPlan)
 	printRemovals(removalPlan)
+	printHeldBack(installPlan)
 
 	if len(installPlan.Changes()) == 0 && len(removalPlan.Items) == 0 {
 		if c := installPlan.Conflicts(); len(c) > 0 && !installPlan.OverwriteConflicts {
-			fmt.Printf("\n%d conflicting file(s) exist on disk but were never installed by loadout — skipped.\n"+
-				"Re-run with --force to overwrite them (a snapshot is taken first).\n", len(c))
 			return nil
 		}
 		fmt.Printf("Already on loadout %q — nothing to do.\n", name)

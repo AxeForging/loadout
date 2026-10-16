@@ -243,7 +243,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "s":
 		if (m.tab == tabAgents || m.tab == tabOverview) && m.plan != nil {
-			if c := len(m.plan.Conflicts()); c > 0 {
+			if l := len(m.plan.LocalEdits()); l > 0 {
+				m.log("%d locally edited file(s) kept — 'loadout diff' to inspect, 'loadout adopt <artifact> --agent <agent>' to keep in the store, 'loadout sync --force' to discard (snapshotted first)", l)
+			}
+			if c := len(m.plan.Conflicts()) - len(m.plan.LocalEdits()); c > 0 {
 				m.log("%d conflicting file(s) skipped — never installed by loadout; run 'loadout sync --force' to overwrite (snapshotted first)", c)
 			}
 			if len(m.plan.Changes()) > 0 {

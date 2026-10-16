@@ -279,6 +279,9 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		Diff     string `json:"diff"`
 	}
 	out := []diffJSON{}
+	// Read-only: include held-back items (conflicts, local edits) so the dock
+	// can show exactly what overwriting them would discard.
+	plan.OverwriteConflicts = true
 	for _, it := range plan.Changes() {
 		text, err := engine.UnifiedDiff(it)
 		if err != nil {
@@ -472,7 +475,11 @@ func (s *Server) handleSyncPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	conflicts := make([]changeJSON, 0)
 	for _, it := range plan.Conflicts() {
-		conflicts = append(conflicts, changeJSON{Op: "conflict", Agent: string(it.Agent), Artifact: it.Artifact.ID, RelPath: it.RelPath})
+		op := "conflict"
+		if it.LocalEdit {
+			op = "overwrite-local"
+		}
+		conflicts = append(conflicts, changeJSON{Op: op, Agent: string(it.Agent), Artifact: it.Artifact.ID, RelPath: it.RelPath})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "changes": changes, "conflicts": conflicts})
 }
