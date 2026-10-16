@@ -111,14 +111,26 @@ func artifactSpecs(a Answers) []artifactSpec {
 	if custom := customInstruction(a); custom != "" {
 		specs = append(specs, artifactSpec{id: "custom-instructions", kind: domain.KindInstruction, files: map[string]string{"": custom}})
 	}
+	issues := sddIssuesMode(a)
 	if a.Bool("continuity.handoff") {
+		handoff, resume, skill := handoffCommand(), resumeCommand(handoffID), contextHandoffSkill(handoffID, resumeID)
+		if issues {
+			handoff, resume, skill = handoffIssuesCommand(resumeID), resumeIssuesCommand(handoffID), contextHandoffIssuesSkill(handoffID, resumeID)
+		}
 		specs = append(specs,
-			artifactSpec{id: handoffID, kind: domain.KindCommand, files: map[string]string{"": handoffCommand()}},
-			artifactSpec{id: resumeID, kind: domain.KindCommand, files: map[string]string{"": resumeCommand(handoffID)}},
-			artifactSpec{id: "context-handoff", kind: domain.KindSkill, files: map[string]string{"SKILL.md": contextHandoffSkill(handoffID, resumeID)}},
+			artifactSpec{id: handoffID, kind: domain.KindCommand, files: map[string]string{"": handoff}},
+			artifactSpec{id: resumeID, kind: domain.KindCommand, files: map[string]string{"": resume}},
+			artifactSpec{id: "context-handoff", kind: domain.KindSkill, files: map[string]string{"SKILL.md": skill}},
 		)
 	}
-	if a.Bool("sdd.enable") {
+	if issues {
+		specs = append(specs,
+			artifactSpec{id: "sdd", kind: domain.KindInstruction, files: map[string]string{"": sddIssuesInstruction(specID, planID)}},
+			artifactSpec{id: planID, kind: domain.KindCommand, files: map[string]string{"": planIssuesCommand()}},
+			artifactSpec{id: specID, kind: domain.KindCommand, files: map[string]string{"": specIssuesCommand(a, planID)}},
+			artifactSpec{id: workflowID, kind: domain.KindSkill, files: map[string]string{"SKILL.md": sddIssuesWorkflowSkill(a, workflowID, specID, planID, handoffID, resumeID)}},
+		)
+	} else if a.Bool("sdd.enable") {
 		specs = append(specs,
 			artifactSpec{id: "sdd", kind: domain.KindInstruction, files: map[string]string{"": sddInstruction(a, specID, planID)}},
 			artifactSpec{id: planID, kind: domain.KindCommand, files: map[string]string{"": planCommand(a)}},

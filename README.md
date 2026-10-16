@@ -75,7 +75,7 @@ loadout sync                     # install into detected agents (asks first)
 | `loadout update [source]` | Fetch updates and classify every skill three-way (upstream-changed / locally-edited / conflict), apply after confirmation — your local edits are never discarded unless you pass `--force-discard` (`--yes` alone never does) |
 | `loadout bundle export [--archive\|--flat]` | Export the store as a shareable directory, `.loadout.tar.gz`, or a single self-contained `.loadout.yaml` document (`--flat`) — everything by default, or exactly `--artifacts`/`--profiles`/`--library` (repeatable) plus `--sources` |
 | `loadout bundle import <path>` | Validate a bundle (directory, `.tar.gz`, or flat YAML — auto-detected), show the merge plan (`--on-conflict skip\|overwrite`), apply after confirmation |
-| `loadout spec init\|list\|status\|check\|uncheck\|sync` | Spec-driven development: numbered specs whose checklists live in the files or in one GitHub issue per spec (`--backend github`, via your `gh` CLI). `check` is the agents' completion loop; `status --require-complete` is a CI gate |
+| `loadout spec init\|list\|status\|check\|uncheck\|sync` | Spec-driven development: numbered specs whose checklists live in the files, in one GitHub issue per spec (`--backend github`), or whose spec *and* plan live entirely in issues (`--backend issues`) — via your `gh` CLI. `check` is the agents' completion loop; `status --require-complete` is a CI gate |
 | `loadout wizard` (alias `create`) | Guided builder: stack + engineering conventions + SDD → generated skills/instructions/commands (`--preset`, `--profile`, `--answers`, `--save-profile`, `--yes`). Set an optional namespace prefix so generated commands become `/af-plan`, `/af-spec`, … instead of clashing with agent built-ins like `/plan` |
 | `loadout profile list\|show\|rm` | Save, list, inspect and delete named wizard answer sets (see `--save-profile` above) |
 | `loadout loadouts save\|list\|show\|switch\|rm` | Named, switchable sets of active artifacts — `switch` installs the set and removes whatever isn't in it (always asks before writing) |
@@ -284,9 +284,17 @@ Where the checklist lives is per-project (`docs/specs/sdd.yaml`):
 - **`backend: local`** (default) — state lives in the spec file itself.
 - **`backend: github`** — one tracking issue per spec; `init` opens it (repo auto-detected from `origin`, labels configurable) and `check` updates the issue body. Requires the [`gh` CLI](https://cli.github.com) — loadout shells out to it, so your existing auth just works and loadout never stores a token. `loadout spec sync` reconciles file ↔ issue: structure always flows local → GitHub, while check-state divergence is reported and only resolved with an explicit `--from-local` / `--from-github` — never guessed.
 
+- **`backend: issues`** — nothing in the repo: each spec *and* its plan live in one GitHub issue titled `spec(NNN): <name>` and labelled `spec`. The plan checklist sits between `<!-- plan:start -->` and `<!-- plan:end -->`. Select it with `--backend issues` or `LOADOUT_SDD_BACKEND=issues` (or `backend: issues` in `sdd.yaml` if you want it committed). Steps are addressed by their `**N.` number or an `sdd:` marker, and `<spec>` also accepts `#<issue>`. Every `check` re-fetches the issue body before it flips the box. `spec sync` does not apply here, because the issue is the only copy.
+
+  ```bash
+  loadout spec init "drift-safe sync" --backend issues   # opens spec(010): drift-safe sync (+ label if missing)
+  loadout spec status 010 --backend issues               # reads the plan section of the issue
+  loadout spec check '#23' 3 --backend issues             # ticks "- [ ] **3. …**" in the issue body
+  ```
+
 The `sdd` wizard preset (`loadout wizard --preset sdd`) installs `/spec`, `/plan` and the `sdd-workflow` skill into every agent, all instructing the same loop: scaffold via `spec init`, mark steps with `spec check` the moment they're done, resume from `spec status`. One tested code path instead of four agents hand-editing checkboxes. `loadout spec` only touches project files — never the store or agent homes.
 
-The wizard's spec-driven section also asks **where spec checklists live** (`sdd.backend`: local files or GitHub issues) — the generated `/spec` command, `sdd` instruction and workflow skill then all point at the matching `loadout spec init` invocation (`--backend github` when the team tracks specs in issues), in the CLI questionnaire and the web Builder alike.
+The wizard's spec-driven section also asks **where specs live** (`sdd.backend`: `local`, `github` or `issues`). For `local` and `github`, the generated `/spec` command, `sdd` instruction and workflow skill all point at the matching `loadout spec init` invocation. For `issues`, `/spec`, `/plan`, `/handoff`, `/resume`, the workflow skill and the `sdd` instruction describe the issues-only flow instead: numbering from `spec(NNN):` titles, the plan kept between the markers, every edit made against a freshly fetched body, and handoffs posted as `<!-- handoff -->` comments on the spec issue. This applies to the CLI questionnaire and the web Builder alike.
 
 ## Profiles — reuse your answers across projects and teams
 

@@ -303,12 +303,14 @@ func dockerSkill(a Answers) string {
 	return b.String()
 }
 
-// sddBackend resolves where spec checklists are tracked: "github" (one
-// tracking issue per spec via the gh CLI) or "local" (inside the spec files),
-// defaulting to local for absent or unknown answers.
+// sddBackend resolves where specs are tracked: "github" (spec file in the
+// repo, checklist in one tracking issue via the gh CLI), "issues" (spec and
+// plan entirely in one issue — see content_issues.go) or "local" (inside the
+// spec files), defaulting to local for absent or unknown answers.
 func sddBackend(a Answers) string {
-	if a.Str("sdd.backend") == "github" {
-		return "github"
+	switch a.Str("sdd.backend") {
+	case "github", "issues":
+		return a.Str("sdd.backend")
 	}
 	return "local"
 }
