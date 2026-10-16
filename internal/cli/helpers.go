@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -164,6 +165,17 @@ func agentFlag() cli.Flag {
 		Name:    "agent",
 		Aliases: []string{"a"},
 		Usage:   "Limit to one or more agents (e.g. claude-code); repeatable",
+	}
+}
+
+// printStoreGitHint warns when edits to the store have no git history
+// (never committed) or are not committed yet. Silent when git is missing or
+// the store is not a git repo.
+func printStoreGitHint(ctx context.Context, s *store.Store) {
+	if h, ok := s.GitHealth(ctx); ok {
+		if w := h.Warning(s.Root); w != "" {
+			fmt.Printf("  ~ %s\n", w)
+		}
 	}
 }
 

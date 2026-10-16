@@ -179,6 +179,8 @@ loadout will never silently destroy config you already had. Two guards protect a
 
   Restores are themselves snapshotted, so they're undoable too. loadout keeps the most recent snapshots and prunes older ones — configure the count with `backups.keep` in `~/.config/loadout/config.yaml` (default 10; a negative value keeps all). Snapshots never touch install state, so `loadout status` stays honest after a restore.
 
+- **The store's own history is your rollback for store edits.** `loadout init` git-initialises the store but never commits for you, so `status`, `sync` and `doctor` print a one-line hint while the store has no commits (`store has no commits — …`) or has uncommitted changes (`store has N uncommitted change(s) — …`). A store that isn't a git repo at all is left alone; `doctor` just notes it.
+
 ## External sources
 
 Track skill repos (yours, your team's, public collections) and stay pinned:
